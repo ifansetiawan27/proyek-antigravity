@@ -32,10 +32,7 @@ const Transactions = {
 
             <div class="form-group" style="margin-bottom:16px;">
               <label class="form-label" style="font-size:11px; font-weight:600; color:var(--text-secondary);">NAMA DOKTER / INSTANSI RS</label>
-              <select class="form-control" id="f-doctor" required>
-                <option value="">-- Pilih Dokter --</option>
-                ${DB.getDoctors().filter(d => d.salesId === user.id).map(d => `<option value="${d.id}">${d.name} — ${d.clinic}</option>`).join('')}
-              </select>
+              <input type="text" class="form-control" id="f-doctor" placeholder="Masukkan nama dokter atau instansi RS" required />
             </div>
 
             <div class="form-group" style="margin-bottom:16px;">
@@ -117,8 +114,9 @@ const Transactions = {
     const docPurchase = {};
 
     txs.forEach(tx => {
-      if (!docPurchase[tx.doctorId]) docPurchase[tx.doctorId] = 0;
-      docPurchase[tx.doctorId] += tx.totalAmount;
+      const key = tx.doctorId || 'Dokter Tidak Dikenal';
+      if (!docPurchase[key]) docPurchase[key] = 0;
+      docPurchase[key] += tx.totalAmount;
     });
 
     const sortedDocs = Object.keys(docPurchase)
@@ -127,7 +125,6 @@ const Transactions = {
         amount: docPurchase[id],
         doc: DB.getDoctorById(id)
       }))
-      .filter(item => item.doc !== null)
       .sort((a, b) => b.amount - a.amount)
       .slice(0, 4);
 
@@ -136,18 +133,22 @@ const Transactions = {
     }
 
     return sortedDocs.map(item => {
-      const isRewardReady = item.doc.stamps >= 4;
+      const doctorName = item.doc ? item.doc.name : item.id;
+      const doctorClinic = item.doc ? item.doc.clinic : '';
+      const isRewardReady = item.doc ? item.doc.stamps >= 4 : false;
+      const rewardLabel = item.doc ? (isRewardReady ? '🎁 Reward Ready' : `⭐ ${item.doc.stamps % 4}/4 Stamp`) : '–';
       return `
       <div style="background:var(--bg-input);border:1px solid var(--border-subtle);border-radius:var(--radius-md);padding:14px;min-width:200px;flex:1;display:flex;align-items:center;gap:12px;">
         <div class="user-avatar-sm" style="background:rgba(16,185,129,0.1);color:var(--primary);flex-shrink:0;width:36px;height:36px;border-radius:50%;display:flex;align-items:center;justify-content:center;">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
         </div>
         <div style="min-width:0;flex:1;">
-          <div style="font-weight:700;font-size:11px;color:var(--text-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-transform:uppercase;" title="${item.doc.name}">${item.doc.name}</div>
+          <div style="font-weight:700;font-size:11px;color:var(--text-primary);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;text-transform:uppercase;" title="${doctorName}">${doctorName}</div>
           <div style="font-weight:800;font-size:14px;color:var(--primary-dark);margin:3px 0;">${DB.formatRupiah(item.amount)}</div>
-          <span class="badge ${isRewardReady ? 'badge-gold' : 'badge-primary'}" style="font-size:9px;padding:2px 8px;border-radius:4px;">
-            ${isRewardReady ? '🎁 Reward Ready' : `⭐ ${item.doc.stamps % 4}/4 Stamp`}
+          <span class="badge ${item.doc && isRewardReady ? 'badge-gold' : 'badge-primary'}" style="font-size:9px;padding:2px 8px;border-radius:4px;">
+            ${rewardLabel}
           </span>
+          ${doctorClinic ? `<div style="font-size:11px;color:var(--text-muted);margin-top:4px;">${doctorClinic}</div>` : ''}
         </div>
       </div>`;
     }).join('');
@@ -166,6 +167,8 @@ const Transactions = {
 
     const rows = txs.map(tx => {
       const doc = DB.getDoctorById(tx.doctorId);
+      const doctorName = doc ? doc.name : tx.doctorId;
+      const doctorClinic = doc ? doc.clinic : '';
       const salesUser = DB.getUserById(tx.salesId);
       const itemsText = tx.items.map(i => i.productName).join(', ') || tx.notes || '–';
 
@@ -173,8 +176,8 @@ const Transactions = {
       <tr>
         <td style="color:var(--text-secondary);font-size:13px;white-space:nowrap;">${tx.date}</td>
         <td>
-          <div style="font-weight:700;font-size:13px;color:var(--text-primary);">${doc ? doc.name : 'Dokter Tidak Dikenal'}</div>
-          <div style="font-size:11px;color:var(--text-muted);margin-top:2px;">${doc ? doc.clinic : ''}</div>
+          <div style="font-weight:700;font-size:13px;color:var(--text-primary);">${doctorName}</div>
+          <div style="font-size:11px;color:var(--text-muted);margin-top:2px;">${doctorClinic}</div>
           ${isManager ? `<div style="font-size:11px;color:var(--primary-light);margin-top:4px;">Sales: ${salesUser ? salesUser.name : '–'}</div>` : ''}
         </td>
         <td style="color:var(--text-secondary);font-size:13px;max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${itemsText}">
@@ -351,12 +354,12 @@ const Transactions = {
   },
 
   saveTransaction() {
-    const doctorId = document.getElementById('f-doctor').value;
+    const doctorId = document.getElementById('f-doctor').value.trim();
     const date = document.getElementById('f-date').value;
     const itemsText = document.getElementById('f-items-text').value.trim();
     const amountVal = document.getElementById('f-total-amount').value;
 
-    if (!doctorId) { App.Toast.show('Pilih dokter terlebih dahulu', 'warning'); return; }
+    if (!doctorId) { App.Toast.show('Masukkan nama dokter / instansi RS', 'warning'); return; }
     if (!date) { App.Toast.show('Pilih tanggal transaksi', 'warning'); return; }
     if (!itemsText) { App.Toast.show('Masukkan Alkes / Obat / Paket', 'warning'); return; }
     if (!amountVal) { App.Toast.show('Masukkan total belanja', 'warning'); return; }
@@ -440,6 +443,8 @@ const Transactions = {
     const tx = DB.getTransactionById(id);
     if (!tx) return;
     const doc = DB.getDoctorById(tx.doctorId);
+    const doctorName = doc ? doc.name : tx.doctorId;
+    const doctorClinic = doc ? doc.clinic : '';
     const salesUser = DB.getUserById(tx.salesId);
     const itemsText = tx.items.map(i => i.productName).join(', ') || tx.notes || '–';
 
@@ -448,9 +453,8 @@ const Transactions = {
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
           <div style="background:var(--bg-input);padding:14px;border-radius:var(--radius-md);">
             <div style="font-size:11px;color:var(--text-muted);margin-bottom:4px;">DOKTER</div>
-            <div style="font-weight:700;color:var(--text-primary);">${doc ? doc.name : '–'}</div>
-            <div style="font-size:12px;color:var(--text-muted);">${doc ? doc.clinic : ''}</div>
-          </div>
+            <div style="font-weight:700;color:var(--text-primary);">${doctorName}</div>
+            <div style="font-size:12px;color:var(--text-muted);">${doctorClinic}</div>
           <div style="background:var(--bg-input);padding:14px;border-radius:var(--radius-md);">
             <div style="font-size:11px;color:var(--text-muted);margin-bottom:4px;">SALES & TANGGAL</div>
             <div style="font-weight:700;color:var(--text-primary);">${salesUser ? salesUser.name : '–'}</div>
