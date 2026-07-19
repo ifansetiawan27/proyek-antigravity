@@ -1,8 +1,232 @@
-/* ============================================================
+﻿/* ============================================================
    DATA LAYER — localStorage CRUD + Seed Data
    ============================================================ */
 
 const DB = {
+  // ---- Supabase Configuration ----
+  // Nilai dibaca dari js/config.js (setara .env untuk pure frontend).
+  // Fallback ke string kosong jika config.js belum dimuat.
+  SUPABASE_URL: (typeof APP_CONFIG !== 'undefined' && APP_CONFIG.SUPABASE_URL) || '',
+  SUPABASE_KEY: (typeof APP_CONFIG !== 'undefined' && APP_CONFIG.SUPABASE_KEY) || '',
+  remoteClient: null,
+
+  initRemote() {
+    if (typeof supabase === 'undefined' || typeof supabase.createClient !== 'function') {
+      console.warn('Supabase SDK belum dimuat');
+      return;
+    }
+    if (!this.SUPABASE_URL || !this.SUPABASE_KEY) {
+      console.warn('SUPABASE_URL atau SUPABASE_KEY kosong di config.js');
+      return;
+    }
+    try {
+      this.remoteClient = supabase.createClient(this.SUPABASE_URL, this.SUPABASE_KEY);
+      console.log('Supabase client berhasil diinisialisasi');
+    } catch (e) {
+      console.error('Gagal membuat Supabase client:', e.message);
+    }
+  },
+
+  async fetchRemoteData() {
+    if (!this.remoteClient) return;
+    const tables = ['users', 'doctors', 'products', 'transactions', 'pipeline', 'stock'];
+    for (const table of tables) {
+      const { data, error } = await this.remoteClient.from(table).select('*');
+      if (!error && Array.isArray(data) && data.length > 0) {
+        this.set(this.KEYS[table], data);
+      }
+    }
+  },
+
+  async syncRemoteTable(table, rows) {
+    if (!this.remoteClient) return;
+    const { error } = await this.remoteClient.from(table).upsert(rows, { onConflict: 'id' });
+    if (error) console.warn('Supabase sync error', table, error);
+  },
+
+  async remoteInsert(table, row) {
+    if (!this.remoteClient) return;
+    const { error } = await this.remoteClient.from(table).insert(row);
+    if (error) console.warn('Supabase insert error', table, error);
+  },
+
+  async remoteUpdate(table, id, updates) {
+    if (!this.remoteClient) return;
+    const { error } = await this.remoteClient.from(table).update(updates).eq('id', id);
+    if (error) console.warn('Supabase update error', table, error);
+  },
+
+  async remoteDelete(table, id) {
+    if (!this.remoteClient) return;
+    const { error } = await this.remoteClient.from(table).delete().eq('id', id);
+    if (error) console.warn('Supabase delete error', table, error);
+  },
+
+  async fetchUserByUsername(username) {
+    if (!this.remoteClient) return null;
+    // NOTE: password is fetched here only for login verification.
+    // The caller (Auth.login) is responsible for stripping it before caching.
+    const { data, error } = await this.remoteClient
+      .from('users')
+      .select('id,name,username,password,role,area,target,avatar')
+      .eq('username', username)
+      .limit(1)
+      .single();
+    if (error) {
+      console.warn('Supabase fetch user error', error);
+      return null;
+    }
+    return data || null;
+  },
+
+  async testConnection() {
+    if (!this.remoteClient) return false;
+    try {
+      const { data, error } = await this.remoteClient.from('users').select('id').limit(1);
+      if (error) {
+        console.warn('Supabase test connection failed', error);
+        return false;
+      }
+      return Array.isArray(data);
+    } catch (e) {
+      console.warn('Supabase test connection exception', e);
+      return false;
+    }
+  },
+
+  // Ekstrak project ref dari URL Supabase
+  getProjectRef() {
+    const match = (this.SUPABASE_URL || '').match(/https:\/\/([^.]+)\.supabase\.co/);
+    return match ? match[1] : null;
+  },
+
+  // Cek tabel mana yang sudah ada / belum di Supabase
+  async checkRemoteTables() {
+    const tables = ['users', 'doctors', 'products', 'transactions', 'pipeline', 'stock'];
+    const result = {};
+    for (const table of tables) {
+      try {
+        const { error } = await this.remoteClient.from(table).select('id').limit(1);
+        // error code 42P01 = relation does not exist
+        result[table] = !error || error.code !== '42P01';
+      } catch {
+        result[table] = false;
+      }
+    }
+    return result; // { users: true, doctors: false, ... }
+  },
+
+  // SQL DDL untuk membuat semua tabel
+  CREATE_TABLES_SQL: `
+    CREATE TABLE IF NOT EXISTS users (
+      id TEXT PRIMARY KEY,
+      name TEXT,
+      username TEXT UNIQUE,
+      password TEXT,
+      role TEXT,
+      area TEXT,
+      target BIGINT DEFAULT 0,
+      avatar TEXT
+    );
+    CREATE TABLE IF NOT EXISTS doctors (
+      id TEXT PRIMARY KEY,
+      name TEXT,
+      clinic TEXT,
+      area TEXT,
+      "salesId" TEXT,
+      stamps INTEGER DEFAULT 0,
+      "totalPurchase" BIGINT DEFAULT 0
+    );
+    CREATE TABLE IF NOT EXISTS products (
+      id TEXT PRIMARY KEY,
+      sku TEXT,
+      name TEXT,
+      category TEXT,
+      "basePrice" BIGINT DEFAULT 0
+    );
+    CREATE TABLE IF NOT EXISTS transactions (
+      id TEXT PRIMARY KEY,
+      "salesId" TEXT,
+      "doctorId" TEXT,
+      date TEXT,
+      "createdAt" TEXT,
+      items JSONB,
+      "totalAmount" BIGINT DEFAULT 0,
+      "stampGiven" INTEGER DEFAULT 0,
+      notes TEXT
+    );
+    CREATE TABLE IF NOT EXISTS pipeline (
+      id TEXT PRIMARY KEY,
+      "doctorName" TEXT,
+      "clinicName" TEXT,
+      "itemName" TEXT,
+      "estimatedValue" BIGINT DEFAULT 0,
+      status TEXT,
+      notes TEXT,
+      "salesId" TEXT,
+      "createdAt" TEXT
+    );
+    CREATE TABLE IF NOT EXISTS stock (
+      id TEXT PRIMARY KEY,
+      kode TEXT,
+      nama TEXT,
+      gudang TEXT,
+      stok INTEGER DEFAULT 0,
+      "stokMin" INTEGER DEFAULT 0,
+      harga BIGINT DEFAULT 0,
+      "hargaJual" BIGINT DEFAULT 0,
+      diskon NUMERIC DEFAULT 0,
+      satuan TEXT,
+      kategori TEXT,
+      pemasok TEXT,
+      sumber JSONB,
+      keterangan TEXT,
+      "updatedAt" TEXT
+    );
+    ALTER TABLE users DISABLE ROW LEVEL SECURITY;
+    ALTER TABLE doctors DISABLE ROW LEVEL SECURITY;
+    ALTER TABLE products DISABLE ROW LEVEL SECURITY;
+    ALTER TABLE transactions DISABLE ROW LEVEL SECURITY;
+    ALTER TABLE pipeline DISABLE ROW LEVEL SECURITY;
+    ALTER TABLE stock DISABLE ROW LEVEL SECURITY;
+  `,
+
+  // Buat semua tabel via Supabase Management API menggunakan Personal Access Token
+  async createTablesViaManagementAPI(accessToken) {
+    const ref = this.getProjectRef();
+    if (!ref) throw new Error('Project ref tidak ditemukan dari SUPABASE_URL');
+
+    const res = await fetch(`https://api.supabase.com/v1/projects/${ref}/database/query`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ query: this.CREATE_TABLES_SQL }),
+    });
+
+    if (!res.ok) {
+      const body = await res.json().catch(() => ({}));
+      throw new Error(body.message || `HTTP ${res.status}`);
+    }
+    return true;
+  },
+
+  // Upsert all local tables to remote (useful for initial migration)
+  async syncAllToRemote() {
+    if (!this.remoteClient) return;
+    const tables = ['users', 'doctors', 'products', 'transactions', 'pipeline', 'stock'];
+    for (const table of tables) {
+      try {
+        const rows = this.get(this.KEYS[table]);
+        if (Array.isArray(rows) && rows.length) {
+          await this.syncRemoteTable(table, rows);
+        }
+      } catch (err) {
+        console.warn('Supabase syncAll error', table, err);
+      }
+    }
+  },
 
   // ---- Keys ----
   KEYS: {
@@ -10,6 +234,8 @@ const DB = {
     doctors: 'sm_doctors',
     products: 'sm_products',
     transactions: 'sm_transactions',
+    pipeline: 'sm_pipeline',
+    stock: 'sm_stock',
   },
 
   // ---- Generic Get/Set ----
@@ -28,17 +254,31 @@ const DB = {
   updateUser(id, updates) {
     const users = this.getUsers();
     const idx = users.findIndex(u => u.id === id);
-    if (idx !== -1) { users[idx] = { ...users[idx], ...updates }; this.set(this.KEYS.users, users); }
+    if (idx !== -1) {
+      users[idx] = { ...users[idx], ...updates };
+      this.set(this.KEYS.users, users);
+      this.remoteUpdate('users', id, updates);
+    }
   },
 
   // ---- Doctors ----
   getDoctors() { return this.get(this.KEYS.doctors); },
   getDoctorById(id) { return this.getDoctors().find(d => d.id === id) || null; },
   getDoctorsByArea(area) { return this.getDoctors().filter(d => d.area === area); },
+  addDoctor(doc) {
+    const doctors = this.getDoctors();
+    doctors.push(doc);
+    this.set(this.KEYS.doctors, doctors);
+    this.remoteInsert('doctors', doc);
+  },
   updateDoctor(id, updates) {
     const docs = this.getDoctors();
     const idx = docs.findIndex(d => d.id === id);
-    if (idx !== -1) { docs[idx] = { ...docs[idx], ...updates }; this.set(this.KEYS.doctors, docs); }
+    if (idx !== -1) {
+      docs[idx] = { ...docs[idx], ...updates };
+      this.set(this.KEYS.doctors, docs);
+      this.remoteUpdate('doctors', id, updates);
+    }
   },
 
   // ---- Products ----
@@ -53,15 +293,200 @@ const DB = {
     const list = this.getTransactions();
     list.unshift(tx);
     this.set(this.KEYS.transactions, list);
+    this.remoteInsert('transactions', tx);
   },
   updateTransaction(id, updates) {
     const list = this.getTransactions();
     const idx = list.findIndex(t => t.id === id);
-    if (idx !== -1) { list[idx] = { ...list[idx], ...updates }; this.set(this.KEYS.transactions, list); }
+    if (idx !== -1) {
+      list[idx] = { ...list[idx], ...updates };
+      this.set(this.KEYS.transactions, list);
+      this.remoteUpdate('transactions', id, updates);
+    }
   },
   deleteTransaction(id) {
     const list = this.getTransactions().filter(t => t.id !== id);
     this.set(this.KEYS.transactions, list);
+    this.remoteDelete('transactions', id);
+  },
+
+  // ---- Pipeline Equipment ----
+  getPipeline() { return this.get(this.KEYS.pipeline); },
+  getPipelineById(id) { return this.getPipeline().find(p => p.id === id) || null; },
+  getPipelineBySales(salesId) { return this.getPipeline().filter(p => p.salesId === salesId); },
+  addPipeline(item) {
+    const list = this.getPipeline();
+    list.unshift(item);
+    this.set(this.KEYS.pipeline, list);
+    this.remoteInsert('pipeline', item);
+  },
+  updatePipeline(id, updates) {
+    const list = this.getPipeline();
+    const idx = list.findIndex(p => p.id === id);
+    if (idx !== -1) {
+      list[idx] = { ...list[idx], ...updates };
+      this.set(this.KEYS.pipeline, list);
+      this.remoteUpdate('pipeline', id, updates);
+    }
+  },
+  deletePipeline(id) {
+    const list = this.getPipeline().filter(p => p.id !== id);
+    this.set(this.KEYS.pipeline, list);
+    this.remoteDelete('pipeline', id);
+  },
+
+  // ---- Stock Gudang ----
+  getStock()          { return this.get(this.KEYS.stock); },
+  getStockById(id)    { return this.getStock().find(s => s.id === id) || null; },
+  getStockByKode(k)   { return this.getStock().find(s => s.kode === k) || null; },
+  addStock(item) {
+    const list = this.getStock();
+    list.push(item);
+    this.set(this.KEYS.stock, list);
+    this.remoteInsert('stock', item);
+  },
+  updateStock(id, updates) {
+    const list = this.getStock();
+    const idx  = list.findIndex(s => s.id === id);
+    if (idx !== -1) {
+      const merged = { ...list[idx], ...updates, updatedAt: this.today() };
+      list[idx] = merged;
+      this.set(this.KEYS.stock, list);
+      this.remoteUpdate('stock', id, { ...updates, updatedAt: this.today() });
+    }
+  },
+  deleteStock(id) {
+    this.set(this.KEYS.stock, this.getStock().filter(s => s.id !== id));
+    this.remoteDelete('stock', id);
+  },
+  upsertStockByKode(row) {
+    const existing = this.getStockByKode(row.kode);
+    if (existing) { this.updateStock(existing.id, row); return 'updated'; }
+    else { this.addStock({ id: this.genId(), ...row, updatedAt: this.today() }); return 'added'; }
+  },
+
+  // ── Bulk upsert: baca + tulis localStorage HANYA 1× (jauh lebih cepat) ──
+  bulkUpsertStockByKodeGudang(rows) {
+    const list = this.getStock();                       // baca 1×
+    const today = this.today();
+    let added = 0, updated = 0, skipped = 0;
+
+    // Buat index kode|gudang → posisi array untuk O(1) lookup
+    const idx = {};
+    list.forEach((s, i) => {
+      idx[(s.kode || '') + '|' + (s.gudang || '')] = i;
+    });
+
+    rows.forEach(row => {
+      const kode   = (row.kode   || '').toString().trim();
+      const gudang = (row.gudang || '').toString().trim();
+      if (!kode) { skipped++; return; }
+
+      const key = kode + '|' + gudang;
+      const pos = idx[key];
+
+      if (pos !== undefined) {
+        const ex = list[pos];
+        const prevSrc = Array.isArray(ex.sumber) ? ex.sumber : [ex.sumber || 'manual'];
+        list[pos] = {
+          ...ex,
+          ...row,
+          kategori:  row.kategori  || ex.kategori  || '',
+          pemasok:   row.pemasok   || ex.pemasok   || '',
+          satuan:    row.satuan    || ex.satuan    || 'Unit',
+          sumber:    [...new Set([...prevSrc, row.sumber].filter(Boolean))],
+          stokMin:   ex.stokMin || 0,
+          harga:     ex.harga   || 0,
+          keterangan: ex.keterangan || '',
+          updatedAt: today,
+        };
+        updated++;
+      } else {
+        const newItem = {
+          id: this.genId(),
+          ...row,
+          sumber:    [row.sumber].filter(Boolean),
+          stokMin:   0,
+          harga:     0,
+          keterangan: '',
+          updatedAt:  today,
+        };
+        list.push(newItem);
+        idx[key] = list.length - 1;                    // update index
+        added++;
+      }
+    });
+
+    this.set(this.KEYS.stock, list);                   // tulis 1×
+    // Sync semua baris ke Supabase secara asinkron (tidak memblokir UI)
+    if (this.remoteClient) {
+      this.syncRemoteTable('stock', list).catch(err => console.warn('Supabase bulk stock sync error', err));
+    }
+    return { added, updated, skipped };
+  },
+
+  // Upsert berdasarkan composite key Kode Barang + Nama Gudang
+  // Merge data dari KBT/SBI/KDS: field kosong tidak menimpa data yang sudah ada
+  upsertStockByKodeGudang(row) {
+    // row: { kode, nama, gudang, stok, hargaJual, diskon, satuan, kategori, pemasok, sumber:'KBT'|'SBI'|'KDS' }
+    const kode   = (row.kode   || '').toString().trim();
+    const gudang = (row.gudang || '').toString().trim();
+    if (!kode) return 'skipped';
+
+    const list     = this.getStock();
+    const existing = list.find(s => (s.kode || '').toString().trim() === kode && (s.gudang || '').toString().trim() === gudang);
+
+    const prevSumber = existing ? (Array.isArray(existing.sumber) ? existing.sumber : [existing.sumber || 'manual']) : [];
+    const newSumber  = [...new Set([...prevSumber, row.sumber].filter(Boolean))];
+
+    const merged = {
+      kode,
+      nama:      row.nama      || (existing && existing.nama)      || '',
+      gudang,
+      stok:      row.stok      !== undefined ? row.stok      : (existing ? existing.stok      : 0),
+      hargaJual: row.hargaJual !== undefined ? row.hargaJual : (existing ? (existing.hargaJual || 0) : 0),
+      diskon:    row.diskon    !== undefined ? row.diskon    : (existing ? (existing.diskon    || 0) : 0),
+      satuan:    row.satuan    || (existing && existing.satuan)    || 'Unit',
+      kategori:  row.kategori  || (existing && existing.kategori)  || '',
+      pemasok:   row.pemasok   || (existing && existing.pemasok)   || '',
+      sumber:    newSumber,
+      stokMin:   existing ? (existing.stokMin || 0) : 0,
+      harga:     existing ? (existing.harga   || 0) : 0,
+      keterangan: existing ? (existing.keterangan || '') : '',
+      updatedAt: this.today(),
+    };
+
+    if (existing) {
+      this.updateStock(existing.id, merged);
+      return 'updated';
+    } else {
+      this.addStock({ id: this.genId(), ...merged });
+      return 'added';
+    }
+  },
+
+  // Seed stock data (terpisah dari seed utama)
+  seedStock() {
+    if (localStorage.getItem('sm_stock_seeded')) return;
+    const stock = [
+      { id: 'stk01', kode: 'ALK-001', nama: 'USG Portable SonoSite iViz',       kategori: 'Alat Diagnostik',  satuan: 'Unit', stok: 3,  stokMin: 2, harga: 85000000,  gudang: 'Gudang A', keterangan: '' },
+      { id: 'stk02', kode: 'ALK-002', nama: 'ECG 12 Lead EDAN SE-1201',          kategori: 'Alat Diagnostik',  satuan: 'Unit', stok: 5,  stokMin: 3, harga: 32000000,  gudang: 'Gudang A', keterangan: '' },
+      { id: 'stk03', kode: 'ALK-003', nama: 'Patient Monitor 5 Parameter',       kategori: 'Monitoring',       satuan: 'Unit', stok: 4,  stokMin: 2, harga: 28000000,  gudang: 'Gudang A', keterangan: '' },
+      { id: 'stk04', kode: 'ALK-004', nama: 'Autoclave 23L Tuttnauer',           kategori: 'Sterilisasi',      satuan: 'Unit', stok: 2,  stokMin: 2, harga: 45000000,  gudang: 'Gudang B', keterangan: 'Stok kritis' },
+      { id: 'stk05', kode: 'ALK-005', nama: 'Infusion Pump TERUMO TE-171',       kategori: 'Terapi Cairan',    satuan: 'Unit', stok: 8,  stokMin: 4, harga: 18000000,  gudang: 'Gudang A', keterangan: '' },
+      { id: 'stk06', kode: 'ALK-006', nama: 'Syringe Pump TERUMO TE-331',        kategori: 'Terapi Cairan',    satuan: 'Unit', stok: 6,  stokMin: 3, harga: 22000000,  gudang: 'Gudang A', keterangan: '' },
+      { id: 'stk07', kode: 'ALK-007', nama: 'Pulse Oximeter Nonin 9590',         kategori: 'Monitoring',       satuan: 'Unit', stok: 10, stokMin: 5, harga: 7200000,   gudang: 'Gudang B', keterangan: '' },
+      { id: 'stk08', kode: 'ALK-008', nama: 'Nebulizer Omron NE-C801',           kategori: 'Terapi Pernapasan',satuan: 'Unit', stok: 12, stokMin: 5, harga: 5500000,   gudang: 'Gudang B', keterangan: '' },
+      { id: 'stk09', kode: 'ALK-009', nama: 'Dental Unit Belmont',               kategori: 'Dental',           satuan: 'Unit', stok: 1,  stokMin: 1, harga: 120000000, gudang: 'Gudang A', keterangan: 'Pre-order' },
+      { id: 'stk10', kode: 'ALK-010', nama: 'Laringoskop Video Karl Storz',      kategori: 'Bedah',            satuan: 'Unit', stok: 2,  stokMin: 1, harga: 95000000,  gudang: 'Gudang A', keterangan: '' },
+      { id: 'stk11', kode: 'OBT-001', nama: 'Urine Analyzer Strip (box 100)',    kategori: 'Reagen & Strip',   satuan: 'Box',  stok: 20, stokMin: 10, harga: 480000,   gudang: 'Gudang B', keterangan: '' },
+      { id: 'stk12', kode: 'OBT-002', nama: 'Blood Glucose Strip (box 50)',      kategori: 'Reagen & Strip',   satuan: 'Box',  stok: 35, stokMin: 15, harga: 320000,   gudang: 'Gudang B', keterangan: '' },
+      { id: 'stk13', kode: 'OBT-003', nama: 'IV Catheter 18G (box 50)',          kategori: 'Disposable',       satuan: 'Box',  stok: 8,  stokMin: 10, harga: 350000,   gudang: 'Gudang B', keterangan: 'Stok kritis' },
+      { id: 'stk14', kode: 'OBT-004', nama: 'Infus Set Terumo (box 50)',         kategori: 'Disposable',       satuan: 'Box',  stok: 15, stokMin: 10, harga: 275000,   gudang: 'Gudang B', keterangan: '' },
+      { id: 'stk15', kode: 'OBT-005', nama: 'Spuit 10ml Terumo (box 100)',       kategori: 'Disposable',       satuan: 'Box',  stok: 25, stokMin: 20, harga: 195000,   gudang: 'Gudang B', keterangan: '' },
+    ].map(s => ({ ...s, updatedAt: this.today() }));
+    this.set(this.KEYS.stock, stock);
+    localStorage.setItem('sm_stock_seeded', '1');
   },
 
   // ---- Helpers ----
@@ -100,223 +525,19 @@ const DB = {
   },
 
   // ---- Seed Data ----
+  // Data uji coba dinonaktifkan untuk produksi.
+  // Data dikelola sepenuhnya melalui Supabase (setup-database.sql).
+  SEED_VERSION: 'v4-production',
   seed() {
-    if (localStorage.getItem('sm_seeded')) return;
-
-    // USERS
-    const users = [
-      { id: 'u_mgr1', name: 'Ahmad Fauzi', username: 'manager1', password: 'manager123', role: 'manager', area: 'All', target: 0, avatar: 'AF' },
-      { id: 'u_s1', name: 'Budi Santoso', username: 'budi_s', password: 'sales123', role: 'sales', area: 'Jakarta Selatan', target: 50000000, avatar: 'BS' },
-      { id: 'u_s2', name: 'Sari Wulandari', username: 'sari_w', password: 'sales123', role: 'sales', area: 'Jakarta Barat', target: 45000000, avatar: 'SW' },
-      { id: 'u_s3', name: 'Rizky Pratama', username: 'rizky_p', password: 'sales123', role: 'sales', area: 'Tangerang', target: 40000000, avatar: 'RP' },
-      { id: 'u_s4', name: 'Dewi Anggraini', username: 'dewi_a', password: 'sales123', role: 'sales', area: 'Bekasi', target: 42000000, avatar: 'DA' },
-      { id: 'u_s5', name: 'Hendra Kurniawan', username: 'hendra_k', password: 'sales123', role: 'sales', area: 'Depok', target: 38000000, avatar: 'HK' },
-    ];
-
-    // DOCTORS
-    const doctors = [
-      { id: 'd1', name: 'dr. Andi Wijaya', clinic: 'Klinik Sehat Makmur', area: 'Jakarta Selatan', salesId: 'u_s1', stamps: 3, totalPurchase: 15200000 },
-      { id: 'd2', name: 'dr. Budi Hartono', clinic: 'Praktek Mandiri', area: 'Jakarta Selatan', salesId: 'u_s1', stamps: 1, totalPurchase: 4500000 },
-      { id: 'd3', name: 'dr. Citra Lestari', clinic: 'RS Cipto Medika', area: 'Jakarta Selatan', salesId: 'u_s1', stamps: 4, totalPurchase: 22000000 },
-      { id: 'd4', name: 'dr. Dian Purnomo', clinic: 'Klinik Dian Medika', area: 'Jakarta Barat', salesId: 'u_s2', stamps: 2, totalPurchase: 8700000 },
-      { id: 'd5', name: 'dr. Eka Saputra', clinic: 'Praktek Bersama Eka', area: 'Jakarta Barat', salesId: 'u_s2', stamps: 0, totalPurchase: 1200000 },
-      { id: 'd6', name: 'dr. Fitri Maharani', clinic: 'Klinik Sejahtera', area: 'Tangerang', salesId: 'u_s3', stamps: 3, totalPurchase: 14000000 },
-      { id: 'd7', name: 'dr. Guntur Wicaksono', clinic: 'Poliklinik Guntur', area: 'Tangerang', salesId: 'u_s3', stamps: 1, totalPurchase: 5500000 },
-      { id: 'd8', name: 'dr. Hani Rahayu', clinic: 'RS Kartika', area: 'Bekasi', salesId: 'u_s4', stamps: 2, totalPurchase: 9800000 },
-      { id: 'd9', name: 'dr. Irwan Susanto', clinic: 'Klinik 24 Jam Irwan', area: 'Bekasi', salesId: 'u_s4', stamps: 0, totalPurchase: 700000 },
-      { id: 'd10', name: 'dr. Joko Widodo', clinic: 'Praktek Umum Joko', area: 'Depok', salesId: 'u_s5', stamps: 2, totalPurchase: 7500000 },
-    ];
-
-    // PRODUCTS
-    const products = [
-      { id: 'p1',  sku: 'INS-001', name: 'Stetoskop Pro Elite', category: 'Diagnostik', basePrice: 1200000 },
-      { id: 'p2',  sku: 'INS-002', name: 'Tensimeter Digital Omron', category: 'Diagnostik', basePrice: 850000 },
-      { id: 'p3',  sku: 'INS-003', name: 'Pulse Oximeter Advanced', category: 'Monitoring', basePrice: 650000 },
-      { id: 'p4',  sku: 'INS-004', name: 'Termometer Infrared', category: 'Diagnostik', basePrice: 350000 },
-      { id: 'p5',  sku: 'INS-005', name: 'Glucometer Smart Pro', category: 'Lab', basePrice: 980000 },
-      { id: 'p6',  sku: 'INS-006', name: 'Nebulizer Mesh Ultra', category: 'Terapi', basePrice: 1450000 },
-      { id: 'p7',  sku: 'INS-007', name: 'ECG Machine Portable', category: 'Kardio', basePrice: 8500000 },
-      { id: 'p8',  sku: 'INS-008', name: 'Urine Analyzer Strip', category: 'Lab', basePrice: 480000 },
-      { id: 'p9',  sku: 'INS-009', name: 'Otoskop Diagnostik', category: 'Diagnostik', basePrice: 720000 },
-      { id: 'p10', sku: 'INS-010', name: 'Lampu Periksa Halogen', category: 'Periksa', basePrice: 550000 },
-      { id: 'p11', sku: 'INS-011', name: 'Timbangan Medis Digital', category: 'Monitoring', basePrice: 1100000 },
-      { id: 'p12', sku: 'INS-012', name: 'Spirometer Digital', category: 'Paru', basePrice: 3200000 },
-      { id: 'p13', sku: 'INS-013', name: 'Refractometer Ophtalmo', category: 'Mata', basePrice: 4500000 },
-      { id: 'p14', sku: 'INS-014', name: 'Alat Sterilisasi Autoklaf Meja', category: 'Sterilisasi', basePrice: 7800000 },
-      { id: 'p15', sku: 'INS-015', name: 'Doppler Fetal Monitor', category: 'Kandungan', basePrice: 2200000 },
-      { id: 'p16', sku: 'MED-001', name: 'Cairan Antiseptik 1L', category: 'Medis Habis Pakai', basePrice: 85000 },
-      { id: 'p17', sku: 'MED-002', name: 'Sarung Tangan Steril (100pcs)', category: 'Medis Habis Pakai', basePrice: 250000 },
-      { id: 'p18', sku: 'MED-003', name: 'Masker Medis N95 (50pcs)', category: 'Medis Habis Pakai', basePrice: 320000 },
-      { id: 'p19', sku: 'MED-004', name: 'Jarum Suntik Disposable (100pcs)', category: 'Medis Habis Pakai', basePrice: 180000 },
-      { id: 'p20', sku: 'MED-005', name: 'Strip Gula Darah (50 test)', category: 'Lab', basePrice: 210000 },
-    ];
-
-    // TRANSACTIONS — historical seed data
-    const now = new Date();
-    const daysAgo = (n) => {
-      const d = new Date(now);
-      d.setDate(d.getDate() - n);
-      return d.toISOString().split('T')[0];
-    };
-
-    const transactions = [
-      {
-        id: DB.genId(), salesId: 'u_s1', doctorId: 'd1',
-        date: daysAgo(0), createdAt: new Date().toISOString(),
-        items: [
-          { productId: 'p1', productName: 'Stetoskop Pro Elite', qty: 2, price: 1200000, discount: 0 },
-          { productId: 'p2', productName: 'Tensimeter Digital Omron', qty: 1, price: 850000, discount: 0 },
-        ],
-        totalAmount: 3250000, stampGiven: 1,
-        notes: 'Kunjungan rutin bulanan'
-      },
-      {
-        id: DB.genId(), salesId: 'u_s1', doctorId: 'd3',
-        date: daysAgo(1), createdAt: new Date(now - 86400000).toISOString(),
-        items: [
-          { productId: 'p6', productName: 'Nebulizer Mesh Ultra', qty: 3, price: 1450000, discount: 5 },
-        ],
-        totalAmount: 4132500, stampGiven: 1,
-        notes: ''
-      },
-      {
-        id: DB.genId(), salesId: 'u_s1', doctorId: 'd2',
-        date: daysAgo(3), createdAt: new Date(now - 3 * 86400000).toISOString(),
-        items: [
-          { productId: 'p4', productName: 'Termometer Infrared', qty: 2, price: 350000, discount: 0 },
-          { productId: 'p16', productName: 'Cairan Antiseptik 1L', qty: 10, price: 85000, discount: 0 },
-        ],
-        totalAmount: 1550000, stampGiven: 1,
-        notes: 'Penawaran produk baru'
-      },
-      {
-        id: DB.genId(), salesId: 'u_s1', doctorId: 'd1',
-        date: daysAgo(7), createdAt: new Date(now - 7 * 86400000).toISOString(),
-        items: [
-          { productId: 'p7', productName: 'ECG Machine Portable', qty: 1, price: 8500000, discount: 10 },
-        ],
-        totalAmount: 7650000, stampGiven: 1,
-        notes: 'Alat besar — negosiasi harga'
-      },
-      {
-        id: DB.genId(), salesId: 'u_s1', doctorId: 'd3',
-        date: daysAgo(12), createdAt: new Date(now - 12 * 86400000).toISOString(),
-        items: [
-          { productId: 'p5', productName: 'Glucometer Smart Pro', qty: 2, price: 980000, discount: 0 },
-          { productId: 'p20', productName: 'Strip Gula Darah (50 test)', qty: 5, price: 210000, discount: 0 },
-        ],
-        totalAmount: 3010000, stampGiven: 1,
-        notes: ''
-      },
-      // Sari Wulandari (u_s2)
-      {
-        id: DB.genId(), salesId: 'u_s2', doctorId: 'd4',
-        date: daysAgo(1), createdAt: new Date(now - 86400000).toISOString(),
-        items: [
-          { productId: 'p1', productName: 'Stetoskop Pro Elite', qty: 1, price: 1200000, discount: 0 },
-          { productId: 'p3', productName: 'Pulse Oximeter Advanced', qty: 2, price: 650000, discount: 0 },
-        ],
-        totalAmount: 2500000, stampGiven: 1,
-        notes: ''
-      },
-      {
-        id: DB.genId(), salesId: 'u_s2', doctorId: 'd5',
-        date: daysAgo(4), createdAt: new Date(now - 4 * 86400000).toISOString(),
-        items: [
-          { productId: 'p17', productName: 'Sarung Tangan Steril (100pcs)', qty: 5, price: 250000, discount: 0 },
-          { productId: 'p18', productName: 'Masker Medis N95 (50pcs)', qty: 4, price: 320000, discount: 0 },
-        ],
-        totalAmount: 2530000, stampGiven: 1,
-        notes: ''
-      },
-      {
-        id: DB.genId(), salesId: 'u_s2', doctorId: 'd4',
-        date: daysAgo(15), createdAt: new Date(now - 15 * 86400000).toISOString(),
-        items: [
-          { productId: 'p11', productName: 'Timbangan Medis Digital', qty: 2, price: 1100000, discount: 0 },
-        ],
-        totalAmount: 2200000, stampGiven: 1,
-        notes: ''
-      },
-      // Rizky Pratama (u_s3)
-      {
-        id: DB.genId(), salesId: 'u_s3', doctorId: 'd6',
-        date: daysAgo(2), createdAt: new Date(now - 2 * 86400000).toISOString(),
-        items: [
-          { productId: 'p12', productName: 'Spirometer Digital', qty: 1, price: 3200000, discount: 5 },
-          { productId: 'p9', productName: 'Otoskop Diagnostik', qty: 2, price: 720000, discount: 0 },
-        ],
-        totalAmount: 4480000, stampGiven: 1,
-        notes: ''
-      },
-      {
-        id: DB.genId(), salesId: 'u_s3', doctorId: 'd7',
-        date: daysAgo(5), createdAt: new Date(now - 5 * 86400000).toISOString(),
-        items: [
-          { productId: 'p6', productName: 'Nebulizer Mesh Ultra', qty: 2, price: 1450000, discount: 0 },
-        ],
-        totalAmount: 2900000, stampGiven: 1,
-        notes: ''
-      },
-      {
-        id: DB.genId(), salesId: 'u_s3', doctorId: 'd6',
-        date: daysAgo(20), createdAt: new Date(now - 20 * 86400000).toISOString(),
-        items: [
-          { productId: 'p15', productName: 'Doppler Fetal Monitor', qty: 1, price: 2200000, discount: 0 },
-          { productId: 'p19', productName: 'Jarum Suntik Disposable (100pcs)', qty: 10, price: 180000, discount: 0 },
-        ],
-        totalAmount: 4000000, stampGiven: 1,
-        notes: ''
-      },
-      // Dewi Anggraini (u_s4)
-      {
-        id: DB.genId(), salesId: 'u_s4', doctorId: 'd8',
-        date: daysAgo(0), createdAt: new Date().toISOString(),
-        items: [
-          { productId: 'p14', productName: 'Alat Sterilisasi Autoklaf Meja', qty: 1, price: 7800000, discount: 8 },
-        ],
-        totalAmount: 7176000, stampGiven: 1,
-        notes: 'Proyek besar klinik baru'
-      },
-      {
-        id: DB.genId(), salesId: 'u_s4', doctorId: 'd9',
-        date: daysAgo(6), createdAt: new Date(now - 6 * 86400000).toISOString(),
-        items: [
-          { productId: 'p2', productName: 'Tensimeter Digital Omron', qty: 2, price: 850000, discount: 0 },
-          { productId: 'p4', productName: 'Termometer Infrared', qty: 3, price: 350000, discount: 0 },
-        ],
-        totalAmount: 2750000, stampGiven: 1,
-        notes: ''
-      },
-      // Hendra Kurniawan (u_s5)
-      {
-        id: DB.genId(), salesId: 'u_s5', doctorId: 'd10',
-        date: daysAgo(1), createdAt: new Date(now - 86400000).toISOString(),
-        items: [
-          { productId: 'p13', productName: 'Refractometer Ophtalmo', qty: 1, price: 4500000, discount: 0 },
-          { productId: 'p10', productName: 'Lampu Periksa Halogen', qty: 2, price: 550000, discount: 0 },
-        ],
-        totalAmount: 5600000, stampGiven: 1,
-        notes: ''
-      },
-      {
-        id: DB.genId(), salesId: 'u_s5', doctorId: 'd10',
-        date: daysAgo(8), createdAt: new Date(now - 8 * 86400000).toISOString(),
-        items: [
-          { productId: 'p8', productName: 'Urine Analyzer Strip', qty: 3, price: 480000, discount: 0 },
-        ],
-        totalAmount: 1440000, stampGiven: 0,
-        notes: 'Di bawah minimum stamp'
-      },
-    ];
-
-    this.set(this.KEYS.users, users);
-    this.set(this.KEYS.doctors, doctors);
-    this.set(this.KEYS.products, products);
-    this.set(this.KEYS.transactions, transactions);
-    localStorage.setItem('sm_seeded', '1');
+    // Bersihkan localStorage dari data seed lama jika ada
+    const oldVersion = localStorage.getItem('sm_seeded');
+    if (oldVersion && oldVersion !== this.SEED_VERSION) {
+      Object.values(this.KEYS).forEach(k => localStorage.removeItem(k));
+      ['sm_stock_seeded'].forEach(k => localStorage.removeItem(k));
+    }
+    localStorage.setItem('sm_seeded', this.SEED_VERSION);
+    // Tidak ada data demo — semua data datang dari Supabase
   },
-
   // ---- Analytics ----
   getSalesTotalBySalesId(salesId, period = 'all') {
     return this.getTransactions()

@@ -11,13 +11,9 @@ const Transactions = {
     const user = Auth.getCurrentUser();
     const isManager = Auth.isManager();
 
-    if (!user) {
-      return `<div class="empty-state" style="padding:32px 16px;">Tidak dapat memuat halaman Transaksi. Silakan login ulang.</div>`;
-    }
-
     return `
     <div class="fade-in">
-      <div class="transactions-grid" style="display: grid; grid-template-columns: ${isManager ? '1fr' : 'minmax(0, 360px) 1fr'}; gap: 24px; align-items: start;">
+      <div style="display: grid; grid-template-columns: ${isManager ? '1fr' : '360px 1fr'}; gap: 24px; align-items: start;">
         
         <!-- LEFT PANEL: PENCATATAN PENJUALAN -->
         ${!isManager ? `
@@ -91,7 +87,7 @@ const Transactions = {
               </h3>
             </div>
 
-            <div class="filter-row" style="margin-bottom: 20px;">
+            <div style="margin-bottom: 20px; display:grid;grid-template-columns:1fr auto;gap:14px;align-items:end;">
               <div>
                 <label class="form-label" style="font-size:11px; font-weight:600; color:var(--text-secondary); margin-bottom:8px; display:block;">CARI NAMA DOKTER / BARANG</label>
                 <div class="search-input-wrap">
@@ -99,13 +95,13 @@ const Transactions = {
                   <input type="text" class="search-input" id="tx-search" placeholder="Ketik kata kunci pencarian..." oninput="Transactions.filterTable()" />
                 </div>
               </div>
-              <div class="filter-month">
+              <div style="min-width:220px;">
                 <label class="form-label" style="font-size:11px; font-weight:600; color:var(--text-secondary); margin-bottom:8px; display:block;">FILTER BULAN</label>
                 <input type="month" class="form-control" id="tx-month" value="${this._selectedMonth}" onchange="Transactions.filterTable()" />
               </div>
             </div>
 
-            <div id="tx-table-container" class="tx-table">
+            <div id="tx-table-container">
               ${this.renderTable(user, isManager)}
             </div>
           </div>
@@ -128,7 +124,7 @@ const Transactions = {
 
     let txs = isManager ? DB.getTransactions() : DB.getTransactionsBySales(user.id);
     if (selectedMonth) {
-      txs = txs.filter(tx => tx.date && tx.date.slice(0, 7) === selectedMonth);
+      txs = txs.filter(tx => tx.date.slice(0, 7) === selectedMonth);
     }
 
     const docPurchase = {};
@@ -136,7 +132,7 @@ const Transactions = {
     txs.forEach(tx => {
       const key = tx.doctorId || 'Dokter Tidak Dikenal';
       if (!docPurchase[key]) docPurchase[key] = 0;
-      docPurchase[key] += Number(tx.totalAmount) || 0;
+      docPurchase[key] += tx.totalAmount;
     });
 
     const sortedDocs = Object.keys(docPurchase)
@@ -178,9 +174,9 @@ const Transactions = {
     const selectedMonth = this._selectedMonth;
     let txs = isManager ? DB.getTransactions() : DB.getTransactionsBySales(user.id);
     if (selectedMonth) {
-      txs = txs.filter(tx => tx.date && tx.date.slice(0, 7) === selectedMonth);
+      txs = txs.filter(tx => tx.date.slice(0, 7) === selectedMonth);
     }
-    txs = txs.sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+    txs = txs.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
     if (txs.length === 0) {
       return `<div class="empty-state" style="padding:32px 16px;">
@@ -191,10 +187,10 @@ const Transactions = {
 
     const rows = txs.map(tx => {
       const doc = DB.getDoctorById(tx.doctorId);
-      const doctorName = doc ? doc.name : tx.doctorId || '–';
+      const doctorName = doc ? doc.name : tx.doctorId;
       const doctorClinic = doc ? doc.clinic : '';
       const salesUser = DB.getUserById(tx.salesId);
-      const itemsText = Array.isArray(tx.items) ? tx.items.map(i => i.productName).join(', ') : (tx.notes || '–');
+      const itemsText = tx.items.map(i => i.productName).join(', ') || tx.notes || '–';
 
       return `
       <tr>
@@ -254,46 +250,36 @@ const Transactions = {
 
     let txs = isManager ? DB.getTransactions() : DB.getTransactionsBySales(user.id);
     if (selectedMonth) {
-      txs = txs.filter(t => t.date && t.date.slice(0, 7) === selectedMonth);
+      txs = txs.filter(t => t.date.slice(0, 7) === selectedMonth);
     }
+    txs = txs.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
 
     if (search) {
       txs = txs.filter(t => {
         const doc = DB.getDoctorById(t.doctorId);
         const docName = doc ? doc.name.toLowerCase() : '';
         const clinic = doc ? doc.clinic.toLowerCase() : '';
-        const items = Array.isArray(t.items) ? t.items.map(i => (i.productName || '').toLowerCase()).join(' ') : '';
-        return docName.includes(search) || clinic.includes(search) || items.includes(search) || (t.notes || '').toLowerCase().includes(search);
+        const items = t.items.map(i => i.productName.toLowerCase()).join(' ') + ' ' + (t.notes || '').toLowerCase();
+        return docName.includes(search) || clinic.includes(search) || items.includes(search);
       });
     }
 
     const grandBadge = document.getElementById('grand-total-badge');
-    if (grandBadge) {
-      grandBadge.textContent = 'Grand Total: ' + DB.formatRupiah(this.getGrandTotal(user, isManager, selectedMonth));
-    }
+    if (grandBadge) grandBadge.textContent = 'Grand Total: ' + DB.formatRupiah(this.getGrandTotal(user, isManager, selectedMonth));
 
     const topDocList = document.getElementById('top-doctors-list');
-    if (topDocList) {
-      topDocList.innerHTML = this.renderTopDoctors(user, isManager);
-    }
+    if (topDocList) topDocList.innerHTML = this.renderTopDoctors(user, isManager);
 
     const tbody = document.getElementById('tx-tbody');
     if (!tbody) return;
 
     if (txs.length === 0) {
       tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;padding:32px;color:var(--text-muted);">Tidak ada transaksi yang cocok</td></tr>`;
-      return;
-    }
-
-    tbody.innerHTML = txs.map(tx => {
+    } else {
+      tbody.innerHTML = txs.map(tx => {
       const doc = DB.getDoctorById(tx.doctorId);
       const salesUser = DB.getUserById(tx.salesId);
-      const itemsText = Array.isArray(tx.items) ? tx.items.map(i => i.productName).join(', ') : (tx.notes || '–');
-
-      let actionButtons = `<button class="btn btn-ghost btn-sm btn-icon" onclick="Transactions.showDetail('${tx.id}')"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>`;
-      if (!isManager) {
-        actionButtons += ` <button class="btn btn-secondary btn-sm btn-icon" onclick="Transactions.editTransaction('${tx.id}')"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button> <button class="btn btn-danger btn-sm btn-icon" onclick="Transactions.confirmDelete('${tx.id}')"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg></button>`;
-      }
+      const itemsText = tx.items.map(i => i.productName).join(', ') || tx.notes || '–';
 
       return `
       <tr>
@@ -301,7 +287,7 @@ const Transactions = {
         <td>
           <div style="font-weight:700;font-size:13px;color:var(--text-primary);">${doc ? doc.name : '–'}</div>
           <div style="font-size:11px;color:var(--text-muted);margin-top:2px;">${doc ? doc.clinic : ''}</div>
-          ${!isManager ? `<div style="font-size:11px;color:var(--primary-light);margin-top:4px;">Sales: ${salesUser ? salesUser.name : '–'}</div>` : ''}
+          ${isManager ? `<div style="font-size:11px;color:var(--primary-light);margin-top:4px;">Sales: ${salesUser ? salesUser.name : '–'}</div>` : ''}
         </td>
         <td style="color:var(--text-secondary);font-size:13px;max-width:240px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${itemsText}">${itemsText}</td>
         <td>
@@ -309,7 +295,12 @@ const Transactions = {
           ${tx.stampGiven > 0 ? '<span class="badge badge-gold" style="font-size:9px;padding:2px 6px;margin-top:4px;display:inline-block;">⭐ +1 Stamp</span>' : ''}
         </td>
         <td>
-          <div style="display:flex;gap:6px;align-items:center;">${actionButtons}</div>
+          <div style="display:flex;gap:6px;align-items:center;">
+            <button class="btn btn-ghost btn-sm btn-icon" onclick="Transactions.showDetail('${tx.id}')"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></button>
+            ${!isManager ? `
+            <button class="btn btn-secondary btn-sm btn-icon" onclick="Transactions.editTransaction('${tx.id}')"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>
+            <button class="btn btn-danger btn-sm btn-icon" onclick="Transactions.confirmDelete('${tx.id}')"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg></button>` : ''}
+          </div>
         </td>
       </tr>`;
     }).join('');
@@ -503,7 +494,7 @@ const Transactions = {
     const isManager = Auth.isManager();
     
     const grandBadge = document.getElementById('grand-total-badge');
-    if (grandBadge) grandBadge.textContent = 'Grand Total: ' + DB.formatRupiah(this.getGrandTotal(user, isManager, this._selectedMonth));
+    if (grandBadge) grandBadge.textContent = 'Grand Total: ' + DB.formatRupiah(this.getGrandTotal(user, isManager));
 
     const topDocList = document.getElementById('top-doctors-list');
     if (topDocList) topDocList.innerHTML = this.renderTopDoctors(user, isManager);
@@ -531,7 +522,6 @@ const Transactions = {
             <div style="font-size:11px;color:var(--text-muted);margin-bottom:4px;">DOKTER</div>
             <div style="font-weight:700;color:var(--text-primary);">${doctorName}</div>
             <div style="font-size:12px;color:var(--text-muted);">${doctorClinic}</div>
-          </div>
           <div style="background:var(--bg-input);padding:14px;border-radius:var(--radius-md);">
             <div style="font-size:11px;color:var(--text-muted);margin-bottom:4px;">SALES & TANGGAL</div>
             <div style="font-weight:700;color:var(--text-primary);">${salesUser ? salesUser.name : '–'}</div>
@@ -592,3 +582,4 @@ const Transactions = {
     this.refreshPageContent();
   },
 };
+

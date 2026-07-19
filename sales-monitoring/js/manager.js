@@ -172,14 +172,13 @@ const Manager = {
       </div>
       <div style="display:flex;gap:8px;align-items:center;">
         <input
-          type="number"
+          type="text"
           class="form-control"
           style="width:140px;font-size:13px;padding:7px 10px;"
           id="target-input-${user.id}"
-          value="${user.target || ''}"
+          value="${user.target ? user.target.toLocaleString('id-ID') : ''}"
           placeholder="Target (Rp)"
-          min="0"
-          step="1000000"
+          oninput="Manager.onTargetInput(this)"
         />
         <button class="btn btn-primary btn-sm" onclick="Manager.saveTarget('${user.id}')">
           Simpan
@@ -188,26 +187,33 @@ const Manager = {
     </div>`;
   },
 
+  formatTargetValue(value) {
+    const digits = (value || '').toString().replace(/\D/g, '');
+    return digits ? Number(digits).toLocaleString('id-ID') : '';
+  },
+
+  parseTargetValue(value) {
+    const digits = (value || '').toString().replace(/\D/g, '');
+    return digits ? parseInt(digits, 10) : 0;
+  },
+
+  onTargetInput(el) {
+    if (!el) return;
+    el.value = this.formatTargetValue(el.value);
+  },
+
   saveTarget(salesId) {
     const input = document.getElementById(`target-input-${salesId}`);
-    const val = parseInt(input.value) || 0;
+    if (!input) return;
+
+    const val = this.parseTargetValue(input.value);
     DB.updateUser(salesId, { target: val });
     App.Toast.show('Target berhasil diperbarui', 'success');
 
-    // Refresh progress reports
-    const board = DB.getLeaderboard();
-    const progressContainer = document.querySelector('.card:nth-child(2) > div:last-child');
-    // Re-render manager page section
-    const mgContainer = document.getElementById('page-content');
-    if (mgContainer) {
-      const progressReports = mgContainer.querySelectorAll('.progress-wrap');
-      const salesUser = DB.getUserById(salesId);
-      if (salesUser) {
-        const boardItem = board.find(b => b.id === salesId);
-        if (boardItem) {
-          const pct = boardItem.target > 0 ? Math.min((boardItem.total / boardItem.target) * 100, 100) : 0;
-          // Partial update — reload page to be safe
-        }
+    if (App.currentPage === 'manager') {
+      const content = document.getElementById('page-content');
+      if (content) {
+        content.innerHTML = Manager.renderPage();
       }
     }
   },

@@ -1,0 +1,627 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Setup Database — SalesMonitor</title>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Inter', sans-serif;
+      background: #0f0f13;
+      color: #e2e8f0;
+      min-height: 100vh;
+      display: flex;
+      align-items: flex-start;
+      justify-content: center;
+      padding: 40px 16px;
+    }
+    .container { width: 100%; max-width: 680px; }
+    .header {
+      display: flex; align-items: center; gap: 14px;
+      margin-bottom: 32px;
+    }
+    .logo {
+      width: 48px; height: 48px; border-radius: 14px;
+      background: linear-gradient(135deg, #7c3aed, #6366f1);
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+    }
+    h1 { font-size: 22px; font-weight: 800; }
+    .subtitle { font-size: 13px; color: #64748b; margin-top: 2px; }
+
+    .card {
+      background: #1a1a24;
+      border: 1px solid #2a2a38;
+      border-radius: 16px;
+      padding: 24px;
+      margin-bottom: 16px;
+    }
+    .card-title {
+      font-size: 14px; font-weight: 700;
+      margin-bottom: 16px;
+      display: flex; align-items: center; gap: 8px;
+    }
+    .step-badge {
+      width: 24px; height: 24px; border-radius: 50%;
+      background: rgba(99,102,241,0.2);
+      color: #818cf8;
+      font-size: 11px; font-weight: 800;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+    }
+
+    .info-box {
+      background: rgba(99,102,241,0.08);
+      border: 1px solid rgba(99,102,241,0.2);
+      border-radius: 10px;
+      padding: 14px 16px;
+      font-size: 13px;
+      line-height: 1.6;
+      color: #a5b4fc;
+      margin-bottom: 16px;
+    }
+    .info-box a { color: #818cf8; }
+
+    .form-label { font-size: 12px; font-weight: 600; color: #94a3b8; margin-bottom: 6px; display: block; }
+    .form-input {
+      width: 100%;
+      background: #0f0f13;
+      border: 1px solid #2a2a38;
+      border-radius: 10px;
+      padding: 10px 14px;
+      font-size: 13px;
+      color: #e2e8f0;
+      font-family: 'Inter', monospace;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+    .form-input:focus { border-color: #6366f1; }
+    .form-input::placeholder { color: #475569; }
+
+    .btn {
+      display: inline-flex; align-items: center; gap: 8px;
+      padding: 10px 20px;
+      border-radius: 10px;
+      font-size: 13px; font-weight: 600;
+      cursor: pointer; border: none;
+      transition: all 0.2s;
+    }
+    .btn-primary {
+      background: linear-gradient(135deg, #7c3aed, #6366f1);
+      color: white;
+    }
+    .btn-primary:hover { opacity: 0.9; transform: translateY(-1px); }
+    .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+    .btn-secondary {
+      background: #1e293b;
+      color: #94a3b8;
+      border: 1px solid #2a2a38;
+    }
+    .btn-secondary:hover { background: #263045; color: #e2e8f0; }
+    .btn-ghost {
+      background: transparent;
+      color: #64748b;
+      border: 1px solid #2a2a38;
+    }
+    .btn-ghost:hover { background: rgba(255,255,255,0.04); color: #94a3b8; }
+
+    /* Table status grid */
+    .table-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+      gap: 10px;
+      margin-top: 12px;
+    }
+    .table-item {
+      background: #0f0f13;
+      border: 1px solid #2a2a38;
+      border-radius: 10px;
+      padding: 12px 14px;
+      display: flex; align-items: center; gap: 10px;
+      font-size: 13px; font-weight: 600;
+    }
+    .table-item.ok { border-color: rgba(16,185,129,0.3); }
+    .table-item.missing { border-color: rgba(239,68,68,0.3); }
+    .table-item.pending { border-color: #2a2a38; color: #475569; }
+    .dot {
+      width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+    }
+    .dot-ok { background: #10b981; }
+    .dot-missing { background: #ef4444; }
+    .dot-pending { background: #475569; }
+
+    /* Log output */
+    #log {
+      background: #0a0a0e;
+      border: 1px solid #2a2a38;
+      border-radius: 10px;
+      padding: 16px;
+      font-family: 'Courier New', monospace;
+      font-size: 12px;
+      line-height: 1.8;
+      min-height: 80px;
+      max-height: 260px;
+      overflow-y: auto;
+      margin-top: 16px;
+    }
+    .log-info  { color: #818cf8; }
+    .log-ok    { color: #10b981; }
+    .log-error { color: #ef4444; }
+    .log-warn  { color: #f59e0b; }
+
+    /* Alert */
+    .alert {
+      border-radius: 10px; padding: 12px 16px;
+      font-size: 13px; display: none;
+      align-items: flex-start; gap: 10px;
+      margin-top: 16px; line-height: 1.5;
+    }
+    .alert.show { display: flex; }
+    .alert-success { background: rgba(16,185,129,0.1); border: 1px solid rgba(16,185,129,0.25); color: #6ee7b7; }
+    .alert-error   { background: rgba(239,68,68,0.1);  border: 1px solid rgba(239,68,68,0.25);  color: #fca5a5; }
+
+    .steps-guide {
+      font-size: 12px; color: #64748b; line-height: 1.8;
+    }
+    .steps-guide ol { padding-left: 18px; }
+    .steps-guide code {
+      background: #0f0f13; padding: 1px 6px;
+      border-radius: 4px; color: #a5b4fc;
+      font-size: 11px;
+    }
+
+    .divider { border: none; border-top: 1px solid #2a2a38; margin: 20px 0; }
+
+    .actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 16px; }
+
+    .back-link {
+      display: inline-flex; align-items: center; gap: 6px;
+      font-size: 13px; color: #64748b; text-decoration: none;
+      margin-top: 24px;
+    }
+    .back-link:hover { color: #94a3b8; }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .spinner {
+      width: 14px; height: 14px;
+      border: 2px solid rgba(255,255,255,0.15);
+      border-top-color: white;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      display: inline-block;
+    }
+  </style>
+</head>
+<body>
+<div class="container">
+
+  <!-- Header -->
+  <div class="header">
+    <div class="logo">
+      <svg width="26" height="26" viewBox="0 0 32 32" fill="none">
+        <path d="M8 22L14 12L18 18L22 10" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+        <circle cx="24" cy="10" r="2" fill="white"/>
+      </svg>
+    </div>
+    <div>
+      <h1>Setup Database</h1>
+      <p class="subtitle">SalesMonitor — Buat tabel Supabase secara otomatis</p>
+    </div>
+  </div>
+
+  <!-- Diagnostik Status -->
+  <div id="diag-card" class="card" style="padding:14px 20px;margin-bottom:16px;">
+    <div style="font-size:12px;font-weight:700;color:#64748b;margin-bottom:10px;text-transform:uppercase;letter-spacing:0.05em;">Diagnostik</div>
+    <div style="display:flex;flex-wrap:wrap;gap:10px;" id="diag-grid">
+      <!-- diisi JS -->
+    </div>
+  </div>
+
+  <!-- Step 1: Status tabel -->
+  <div class="card">
+    <div class="card-title">
+      <span class="step-badge">1</span>
+      Cek Status Tabel Supabase
+    </div>
+    <p class="steps-guide" style="margin-bottom:14px;">
+      Klik tombol di bawah untuk memeriksa tabel mana yang sudah ada di proyek Supabase Anda.
+    </p>
+    <button class="btn btn-secondary" id="btn-check" onclick="checkTables()">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg>
+      Cek Tabel
+    </button>
+    <div class="table-grid" id="table-status">
+      <!-- diisi oleh JS -->
+    </div>
+    <div id="check-alert" class="alert"></div>
+  </div>
+
+  <!-- Step 2: Buat tabel otomatis -->
+  <div class="card">
+    <div class="card-title">
+      <span class="step-badge">2</span>
+      Buat Tabel Otomatis via Management API
+    </div>
+
+    <div class="info-box">
+      Untuk membuat tabel secara otomatis, dibutuhkan <strong>Supabase Personal Access Token</strong>
+      (bukan anon key).<br><br>
+      Cara mendapatkannya:<br>
+      <ol style="padding-left:18px;margin-top:6px;">
+        <li>Login ke <a href="https://supabase.com/dashboard" target="_blank">supabase.com/dashboard</a></li>
+        <li>Klik foto profil (pojok kiri bawah) → <strong>Access Tokens</strong></li>
+        <li>Klik <strong>"Generate new token"</strong> → beri nama → <strong>Generate</strong></li>
+        <li>Copy token yang muncul dan paste di bawah</li>
+      </ol>
+    </div>
+
+    <label class="form-label" for="access-token">Personal Access Token</label>
+    <input
+      type="password"
+      id="access-token"
+      class="form-input"
+      placeholder="sbp_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+    />
+
+    <div class="actions">
+      <button class="btn btn-primary" id="btn-create" onclick="createTables()">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+        Buat Semua Tabel
+      </button>
+      <button class="btn btn-ghost" onclick="toggleToken()">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+        <span id="toggle-label">Tampilkan Token</span>
+      </button>
+    </div>
+
+    <div id="log">
+      <span class="log-info">// Log akan muncul di sini setelah proses dimulai...</span>
+    </div>
+
+    <div id="create-alert" class="alert"></div>
+  </div>
+
+  <!-- Step 3: Sync data -->
+  <div class="card" id="step3" style="display:none;">
+    <div class="card-title">
+      <span class="step-badge">3</span>
+      Sinkronisasi Data Awal ke Supabase
+    </div>
+    <p class="steps-guide" style="margin-bottom:14px;">
+      Tabel berhasil dibuat! Sekarang kembali ke aplikasi utama dan klik tombol
+      <code>Sync</code> di topbar untuk mengirim data lokal ke Supabase.
+    </p>
+    <div class="actions">
+      <a href="index.html" class="btn btn-primary">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>
+        Kembali ke Aplikasi
+      </a>
+    </div>
+  </div>
+
+  <a href="index.html" class="back-link">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 5l-7 7 7 7"/></svg>
+    Kembali ke SalesMonitor
+  </a>
+
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/supabase.min.js"></script>
+<script src="js/config.js"></script>
+<script>
+  // Baca dari config.js jika ada, fallback ke nilai default
+  // (setup-db.html adalah halaman admin sekali pakai, aman menyimpan fallback di sini)
+  const SUPABASE_URL = (typeof APP_CONFIG !== 'undefined' && APP_CONFIG.SUPABASE_URL)
+    ? APP_CONFIG.SUPABASE_URL
+    : 'https://vrmywumkcetsvwtqhepr.supabase.co';
+  const SUPABASE_KEY = (typeof APP_CONFIG !== 'undefined' && APP_CONFIG.SUPABASE_KEY)
+    ? APP_CONFIG.SUPABASE_KEY
+    : 'sb_publishable_t83ZRWaV3ONPW8zFX3orJg_zm4ZhUWL';
+  const TABLES = ['users', 'doctors', 'products', 'transactions', 'pipeline', 'stock'];
+
+  let client = null;
+  let _initError = null;
+
+  (function initClient() {
+    // 1. Cek Supabase SDK
+    if (typeof supabase === 'undefined' || typeof supabase.createClient !== 'function') {
+      _initError = 'Supabase SDK gagal dimuat dari CDN. Periksa koneksi internet Anda.';
+      return;
+    }
+    // 2. Cek config
+    if (!SUPABASE_URL) {
+      _initError = 'SUPABASE_URL kosong. Periksa js/config.js — pastikan APP_CONFIG.SUPABASE_URL terisi.';
+      return;
+    }
+    if (!SUPABASE_KEY) {
+      _initError = 'SUPABASE_KEY kosong. Periksa js/config.js — pastikan APP_CONFIG.SUPABASE_KEY terisi.';
+      return;
+    }
+    // 3. Buat client
+    try {
+      client = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+    } catch (e) {
+      _initError = 'Gagal membuat Supabase client: ' + e.message;
+    }
+  })();
+
+  function getProjectRef() {
+    const m = (SUPABASE_URL || '').match(/https:\/\/([^.]+)\.supabase\.co/);
+    return m ? m[1] : null;
+  }
+
+  function addLog(msg, type = 'info') {
+    const log = document.getElementById('log');
+    const line = document.createElement('div');
+    line.className = `log-${type}`;
+    line.textContent = `[${new Date().toLocaleTimeString('id-ID')}] ${msg}`;
+    log.appendChild(line);
+    log.scrollTop = log.scrollHeight;
+  }
+
+  function clearLog() {
+    document.getElementById('log').innerHTML = '';
+  }
+
+  function showAlert(id, msg, type) {
+    const el = document.getElementById(id);
+    el.className = `alert alert-${type} show`;
+    el.textContent = msg;
+  }
+
+  function hideAlert(id) {
+    document.getElementById(id).className = 'alert';
+  }
+
+  function toggleToken() {
+    const inp = document.getElementById('access-token');
+    const lbl = document.getElementById('toggle-label');
+    if (inp.type === 'password') {
+      inp.type = 'text';
+      lbl.textContent = 'Sembunyikan Token';
+    } else {
+      inp.type = 'password';
+      lbl.textContent = 'Tampilkan Token';
+    }
+  }
+
+  function renderTableGrid(statusMap) {
+    const grid = document.getElementById('table-status');
+    if (!statusMap) {
+      grid.innerHTML = TABLES.map(t => `
+        <div class="table-item pending">
+          <span class="dot dot-pending"></span>${t}
+        </div>`).join('');
+      return;
+    }
+    grid.innerHTML = TABLES.map(t => {
+      const ok = statusMap[t];
+      return `
+        <div class="table-item ${ok ? 'ok' : 'missing'}">
+          <span class="dot ${ok ? 'dot-ok' : 'dot-missing'}"></span>
+          ${t}
+          <span style="margin-left:auto;font-size:10px;color:${ok ? '#10b981' : '#ef4444'};">
+            ${ok ? '✓' : '✗'}
+          </span>
+        </div>`;
+    }).join('');
+  }
+
+  // Tampilkan status diagnostik
+  function renderDiag() {
+    const items = [
+      {
+        label: 'Supabase SDK',
+        ok: typeof supabase !== 'undefined' && typeof supabase.createClient === 'function',
+        detail: typeof supabase !== 'undefined' ? 'v2 UMD loaded' : 'Tidak dimuat (CDN gagal)',
+      },
+      {
+        label: 'config.js',
+        ok: typeof APP_CONFIG !== 'undefined',
+        detail: typeof APP_CONFIG !== 'undefined' ? 'Ditemukan' : 'Tidak ditemukan',
+      },
+      {
+        label: 'SUPABASE_URL',
+        ok: !!SUPABASE_URL,
+        detail: SUPABASE_URL ? SUPABASE_URL.replace(/https:\/\/([^.]{6})[^.]+/, 'https://$1…') : 'Kosong',
+      },
+      {
+        label: 'SUPABASE_KEY',
+        ok: !!SUPABASE_KEY,
+        detail: SUPABASE_KEY ? SUPABASE_KEY.slice(0, 12) + '…' : 'Kosong',
+      },
+      {
+        label: 'Client',
+        ok: !!client,
+        detail: client ? 'Siap' : (_initError || 'Gagal dibuat'),
+      },
+    ];
+    document.getElementById('diag-grid').innerHTML = items.map(item => `
+      <div style="display:flex;align-items:center;gap:8px;padding:6px 12px;background:${item.ok ? 'rgba(16,185,129,0.08)' : 'rgba(239,68,68,0.08)'};border:1px solid ${item.ok ? 'rgba(16,185,129,0.2)' : 'rgba(239,68,68,0.2)'};border-radius:8px;">
+        <span style="width:8px;height:8px;border-radius:50%;background:${item.ok ? '#10b981' : '#ef4444'};flex-shrink:0;"></span>
+        <span style="font-size:12px;font-weight:600;color:${item.ok ? '#6ee7b7' : '#fca5a5'};">${item.label}</span>
+        <span style="font-size:11px;color:#64748b;">${item.detail}</span>
+      </div>`).join('');
+  }
+
+  // Init tampilan awal
+  renderDiag();
+  renderTableGrid(null);
+
+  async function checkTables() {
+    hideAlert('check-alert');
+    const btn = document.getElementById('btn-check');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span> Mengecek...';
+
+    if (!client) {
+      showAlert('check-alert', _initError || 'Supabase client tidak terinisialisasi.', 'error');
+      btn.disabled = false;
+      btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg> Cek Tabel';
+      return;
+    }
+
+    const statusMap = {};
+    for (const table of TABLES) {
+      const { error } = await client.from(table).select('id').limit(1);
+      statusMap[table] = !error || error.code !== '42P01';
+    }
+
+    renderTableGrid(statusMap);
+
+    const missing = TABLES.filter(t => !statusMap[t]);
+    if (missing.length === 0) {
+      showAlert('check-alert', '✓ Semua tabel sudah ada di Supabase! Anda bisa langsung menggunakan aplikasi.', 'success');
+    } else {
+      showAlert('check-alert', `${missing.length} tabel belum ada: ${missing.join(', ')}. Lanjutkan ke Langkah 2.`, 'error');
+    }
+
+    btn.disabled = false;
+    btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg> Cek Tabel';
+  }
+
+  const CREATE_SQL = `
+    CREATE TABLE IF NOT EXISTS users (
+      id TEXT PRIMARY KEY,
+      name TEXT,
+      username TEXT UNIQUE,
+      password TEXT,
+      role TEXT,
+      area TEXT,
+      target BIGINT DEFAULT 0,
+      avatar TEXT
+    );
+    CREATE TABLE IF NOT EXISTS doctors (
+      id TEXT PRIMARY KEY,
+      name TEXT,
+      clinic TEXT,
+      area TEXT,
+      "salesId" TEXT,
+      stamps INTEGER DEFAULT 0,
+      "totalPurchase" BIGINT DEFAULT 0
+    );
+    CREATE TABLE IF NOT EXISTS products (
+      id TEXT PRIMARY KEY,
+      sku TEXT,
+      name TEXT,
+      category TEXT,
+      "basePrice" BIGINT DEFAULT 0
+    );
+    CREATE TABLE IF NOT EXISTS transactions (
+      id TEXT PRIMARY KEY,
+      "salesId" TEXT,
+      "doctorId" TEXT,
+      date TEXT,
+      "createdAt" TEXT,
+      items JSONB,
+      "totalAmount" BIGINT DEFAULT 0,
+      "stampGiven" INTEGER DEFAULT 0,
+      notes TEXT
+    );
+    CREATE TABLE IF NOT EXISTS pipeline (
+      id TEXT PRIMARY KEY,
+      "doctorName" TEXT,
+      "clinicName" TEXT,
+      "itemName" TEXT,
+      "estimatedValue" BIGINT DEFAULT 0,
+      status TEXT,
+      notes TEXT,
+      "salesId" TEXT,
+      "createdAt" TEXT
+    );
+    CREATE TABLE IF NOT EXISTS stock (
+      id TEXT PRIMARY KEY,
+      kode TEXT,
+      nama TEXT,
+      gudang TEXT,
+      stok INTEGER DEFAULT 0,
+      "stokMin" INTEGER DEFAULT 0,
+      harga BIGINT DEFAULT 0,
+      "hargaJual" BIGINT DEFAULT 0,
+      diskon NUMERIC DEFAULT 0,
+      satuan TEXT,
+      kategori TEXT,
+      pemasok TEXT,
+      sumber JSONB,
+      keterangan TEXT,
+      "updatedAt" TEXT
+    );
+    ALTER TABLE users DISABLE ROW LEVEL SECURITY;
+    ALTER TABLE doctors DISABLE ROW LEVEL SECURITY;
+    ALTER TABLE products DISABLE ROW LEVEL SECURITY;
+    ALTER TABLE transactions DISABLE ROW LEVEL SECURITY;
+    ALTER TABLE pipeline DISABLE ROW LEVEL SECURITY;
+    ALTER TABLE stock DISABLE ROW LEVEL SECURITY;
+  `;
+
+  async function createTables() {
+    hideAlert('create-alert');
+    clearLog();
+
+    const token = document.getElementById('access-token').value.trim();
+    if (!token) {
+      showAlert('create-alert', 'Masukkan Personal Access Token terlebih dahulu.', 'error');
+      return;
+    }
+
+    const ref = getProjectRef();
+    if (!ref) {
+      showAlert('create-alert', 'Project ref tidak dapat dibaca dari SUPABASE_URL di config.js.', 'error');
+      return;
+    }
+
+    const btn = document.getElementById('btn-create');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span> Membuat tabel...';
+
+    addLog(`Project ref: ${ref}`, 'info');
+    addLog('Menghubungi Supabase Management API...', 'info');
+
+    try {
+      const res = await fetch(`https://api.supabase.com/v1/projects/${ref}/database/query`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ query: CREATE_SQL }),
+      });
+
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        const msg = body.message || body.error || `HTTP ${res.status}`;
+        addLog(`Gagal: ${msg}`, 'error');
+        if (res.status === 401) {
+          addLog('Token tidak valid atau sudah kedaluwarsa. Coba generate token baru.', 'warn');
+        }
+        showAlert('create-alert', `Gagal membuat tabel: ${msg}`, 'error');
+        btn.disabled = false;
+        btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg> Buat Semua Tabel';
+        return;
+      }
+
+      addLog('Perintah SQL berhasil dikirim!', 'ok');
+      TABLES.forEach(t => addLog(`  ✓ Tabel "${t}" siap`, 'ok'));
+      addLog('Row Level Security dinonaktifkan untuk semua tabel.', 'ok');
+      addLog('Selesai! Klik tombol "Kembali ke Aplikasi" lalu tekan Sync.', 'ok');
+
+      showAlert('create-alert', '✓ Semua tabel berhasil dibuat! Lanjutkan ke Langkah 3.', 'success');
+      document.getElementById('step3').style.display = 'block';
+
+      // Auto refresh status tabel
+      await checkTables();
+
+    } catch (err) {
+      addLog(`Error: ${err.message}`, 'error');
+      addLog('Pastikan browser Anda tidak memblokir request ke api.supabase.com.', 'warn');
+      showAlert('create-alert', `Error: ${err.message}`, 'error');
+    }
+
+    btn.disabled = false;
+    btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg> Buat Semua Tabel';
+  }
+</script>
+</body>
+</html>

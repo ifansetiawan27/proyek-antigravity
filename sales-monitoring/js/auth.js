@@ -5,7 +5,7 @@
 const Auth = {
   SESSION_KEY: 'sm_session',
 
-  login() {
+  async login() {
     const username = document.getElementById('login-username').value.trim();
     const password = document.getElementById('login-password').value.trim();
     const errEl = document.getElementById('login-error');
@@ -16,7 +16,24 @@ const Auth = {
       return;
     }
 
-    const user = DB.getUserByUsername(username);
+    let user = DB.getUserByUsername(username);
+    if (!user && DB.remoteClient) {
+      user = await DB.fetchUserByUsername(username);
+      if (user) {
+        // Verify password before caching; strip it from the cached record
+        if (user.password !== password) {
+          errEl.classList.remove('hidden');
+          errEl.lastChild.textContent = ' Username atau password salah';
+          return;
+        }
+        const { password: _pw, ...safeUser } = user;
+        const users = DB.getUsers();
+        users.push(safeUser);
+        DB.set(DB.KEYS.users, users);
+        user = safeUser;
+      }
+    }
+
     if (!user || user.password !== password) {
       errEl.classList.remove('hidden');
       errEl.lastChild.textContent = ' Username atau password salah';
@@ -69,11 +86,18 @@ const Auth = {
     document.getElementById('login-page').classList.add('hidden');
     document.getElementById('app').classList.remove('hidden');
 
-    // Update sidebar user info
-    document.getElementById('sidebar-name').textContent = user.name;
-    document.getElementById('sidebar-role').textContent = user.role === 'manager' ? 'Sales Manager' : 'Sales Representative';
-    document.getElementById('sidebar-avatar').textContent = DB.initials(user.name);
-    document.getElementById('topbar-avatar').textContent = DB.initials(user.name);
+    // Update topbar user info
+    const initials = DB.initials(user.name);
+    const roleLabel = user.role === 'manager' ? 'Sales Manager' : 'Sales Representative';
+    const el = (id) => document.getElementById(id);
+    if (el('topbar-avatar-initials')) el('topbar-avatar-initials').textContent = initials;
+    if (el('topbar-avatar')) el('topbar-avatar').textContent = initials;
+    if (el('topbar-user-name')) el('topbar-user-name').textContent = user.name;
+    if (el('topbar-user-email')) el('topbar-user-email').textContent = '@' + (user.username || user.name.toLowerCase().replace(/\s/g,''));
+    // Legacy sidebar elements (safe fallbacks)
+    if (el('sidebar-name')) el('sidebar-name').textContent = user.name;
+    if (el('sidebar-role')) el('sidebar-role').textContent = roleLabel;
+    if (el('sidebar-avatar')) el('sidebar-avatar').textContent = initials;
 
     // Show manager items if role = manager
     document.querySelectorAll('.manager-only').forEach(el => {

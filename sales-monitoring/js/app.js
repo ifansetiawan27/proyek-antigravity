@@ -5,11 +5,74 @@
 const App = {
   currentPage: null,
 
-  init() {
-    // Seed data
-    DB.seed();
+  async init() {
+    DB.initRemote();
+    // DB.seed() dan DB.seedStock() dinonaktifkan untuk produksi.
+    // Data dikelola via Supabase (lihat setup-database.sql).
+    DB.seed(); // hanya membersihkan localStorage lama, tidak insert data
+    if (DB.remoteClient) {
+      DB.fetchRemoteData().catch(err => console.warn('Supabase load failed', err));
+      // Cek tabel setelah 2 detik (beri waktu koneksi stabil)
+      setTimeout(() => this.checkAndShowDbSetupBanner(), 2000);
+    }
     // Start clock
     this.startClock();
+    // Hook Supabase test/sync buttons with loading states
+    const testBtn = document.getElementById('btn-test-supabase');
+    const syncBtn = document.getElementById('btn-sync-supabase');
+    const setBtnLoading = (btn, loading, label) => {
+      if (!btn) return;
+      if (loading) {
+        btn.dataset.orig = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = `<span style="display:inline-block;width:14px;height:14px;border:2px solid rgba(0,0,0,0.12);border-top-color:var(--primary);border-radius:50%;animation:spin .8s linear infinite;margin-right:8px;vertical-align:middle"></span>${label}`;
+      } else {
+        btn.disabled = false;
+        if (btn.dataset.orig) {
+          btn.innerHTML = btn.dataset.orig;
+          delete btn.dataset.orig;
+        }
+      }
+    };
+
+    if (testBtn) testBtn.addEventListener('click', async () => {
+      setBtnLoading(testBtn, true, 'Testing...');
+      App.Toast.show('Menguji koneksi Supabase...', 'info');
+      try {
+        const ok = await DB.testConnection();
+        if (ok) App.Toast.show('Supabase terhubung ✓', 'success');
+        else App.Toast.show('Tidak dapat terhubung ke Supabase', 'error');
+      } catch (e) {
+        App.Toast.show('Kesalahan saat menguji koneksi', 'error');
+        console.warn(e);
+      } finally {
+        setBtnLoading(testBtn, false);
+      }
+    });
+
+    if (syncBtn) syncBtn.addEventListener('click', async () => {
+      const confirmSync = confirm('Sinkronisasi akan mengirim data lokal ke Supabase. Lanjutkan?');
+      if (!confirmSync) return;
+      setBtnLoading(syncBtn, true, 'Syncing...');
+      App.Toast.show('Menyinkronkan data ke Supabase...', 'info');
+      try {
+        await DB.syncAllToRemote();
+        App.Toast.show('Sinkronisasi selesai', 'success');
+      } catch (e) {
+        App.Toast.show('Sinkronisasi gagal', 'error');
+        console.warn(e);
+      } finally {
+        setBtnLoading(syncBtn, false);
+      }
+    });
+
+    const mobilePreviewBtn = document.getElementById('btn-mobile-preview');
+    if (mobilePreviewBtn) {
+      mobilePreviewBtn.addEventListener('click', () => {
+        const isEnabled = document.body.classList.toggle('mobile-preview');
+        mobilePreviewBtn.textContent = isEnabled ? 'Exit Mobile' : 'Mobile Preview';
+      });
+    }
     // Check session
     if (!Auth.checkSession()) {
       document.getElementById('login-page').classList.remove('hidden');
@@ -18,6 +81,65 @@ const App = {
     document.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') this.closeModal();
     });
+  },
+
+  // Cek tabel Supabase dan tampilkan banner jika ada yang belum dibuat
+  async checkAndShowDbSetupBanner() {
+    if (!DB.remoteClient) return;
+    try {
+      const status = await DB.checkRemoteTables();
+      const missing = Object.entries(status).filter(([, ok]) => !ok).map(([t]) => t);
+      if (missing.length === 0) return; // semua tabel sudah ada
+
+      // Tampilkan banner peringatan di atas konten
+      const existing = document.getElementById('db-setup-banner');
+      if (existing) return; // sudah ditampilkan
+
+      const banner = document.createElement('div');
+      banner.id = 'db-setup-banner';
+      banner.style.cssText = [
+        'position:fixed;bottom:20px;right:20px;z-index:9999;',
+        'background:linear-gradient(135deg,#1e1030,#16103a);',
+        'border:1px solid rgba(139,92,246,0.4);',
+        'border-radius:14px;padding:16px 20px;max-width:360px;',
+        'box-shadow:0 8px 32px rgba(0,0,0,0.5);',
+        'animation:slideInUp 0.4s ease;',
+      ].join('');
+      banner.innerHTML = `
+        <div style="display:flex;align-items:flex-start;gap:12px;">
+          <div style="width:36px;height:36px;border-radius:10px;background:rgba(139,92,246,0.2);display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#a78bfa" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+          </div>
+          <div style="flex:1;">
+            <div style="font-size:13px;font-weight:700;color:#e2e8f0;margin-bottom:4px;">Tabel Supabase Belum Dibuat</div>
+            <div style="font-size:12px;color:#94a3b8;line-height:1.5;margin-bottom:12px;">
+              ${missing.length} tabel belum ada: <strong style="color:#c4b5fd;">${missing.join(', ')}</strong>.
+              Data tidak akan tersimpan ke cloud.
+            </div>
+            <div style="display:flex;gap:8px;">
+              <a href="setup-db.html" target="_blank" style="display:inline-flex;align-items:center;gap:6px;padding:7px 14px;background:linear-gradient(135deg,#7c3aed,#6366f1);border-radius:8px;font-size:12px;font-weight:600;color:white;text-decoration:none;">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+                Setup Database
+              </a>
+              <button onclick="document.getElementById('db-setup-banner').remove()" style="padding:7px 12px;background:transparent;border:1px solid rgba(148,163,184,0.2);border-radius:8px;font-size:12px;color:#64748b;cursor:pointer;">
+                Nanti
+              </button>
+            </div>
+          </div>
+        </div>
+      `;
+      document.body.appendChild(banner);
+
+      // Tambahkan animasi slideInUp jika belum ada
+      if (!document.getElementById('setup-banner-style')) {
+        const s = document.createElement('style');
+        s.id = 'setup-banner-style';
+        s.textContent = '@keyframes slideInUp{from{opacity:0;transform:translateY(20px)}to{opacity:1;transform:translateY(0)}}';
+        document.head.appendChild(s);
+      }
+    } catch (e) {
+      console.warn('DB setup check error', e);
+    }
   },
 
   navigate(page) {
@@ -40,13 +162,16 @@ const App = {
     // Update page title
     const titles = {
       dashboard: 'Dashboard',
+      appsheet: 'Appsheet v.7',
       transactions: 'Transaksi',
-      loyalty: 'Loyalty Stamp',
+      loyalty: 'Loyalty Program',
       products: '20 Best Products',
       leaderboard: 'Leaderboard',
+      reports: 'Reports',
       manager: 'Panel Manager',
     };
-    document.getElementById('page-title').textContent = titles[page] || page;
+    const pageTitleEl = document.getElementById('page-title');
+    if (pageTitleEl) pageTitleEl.textContent = titles[page] || page;
 
     // Render page content
     const content = document.getElementById('page-content');
@@ -56,10 +181,12 @@ const App = {
       let html = '';
       switch (page) {
         case 'dashboard':   html = this.renderDashboard(user); break;
+        case 'appsheet':    html = this.renderAppsheet(); break;
         case 'transactions': html = Transactions.renderPage(); break;
         case 'loyalty':     html = Loyalty.renderPage(); break;
         case 'products':    html = Products.renderPage(); break;
         case 'leaderboard': html = Leaderboard.renderPage(); break;
+        case 'reports':     html = Reports.renderPage(); break;
         case 'manager':     html = Manager.renderPage(); break;
         default:            html = '<p>Halaman tidak ditemukan</p>';
       }
@@ -75,6 +202,522 @@ const App = {
     } else {
       return this.renderSalesDashboard(user);
     }
+  },
+
+  // Sumber badge config
+  SUMBER_CFG: {
+    KBT:    { color: '#d97706', bg: 'rgba(217,119,6,0.12)',   border: 'rgba(217,119,6,0.3)'   },
+    SBI:    { color: '#2563eb', bg: 'rgba(37,99,235,0.10)',   border: 'rgba(37,99,235,0.3)'   },
+    KDS:    { color: '#16a34a', bg: 'rgba(22,163,74,0.10)',   border: 'rgba(22,163,74,0.3)'   },
+    manual: { color: '#64748b', bg: 'rgba(100,116,139,0.08)', border: 'rgba(100,116,139,0.2)' },
+  },
+
+  renderSumberBadges(sumber) {
+    const srcs = Array.isArray(sumber) ? sumber : [sumber || 'manual'];
+    return srcs.filter(Boolean).map(s => {
+      const c = this.SUMBER_CFG[s] || this.SUMBER_CFG.manual;
+      return `<span style="display:inline-block;padding:2px 7px;border-radius:20px;font-size:10px;font-weight:700;color:${c.color};background:${c.bg};border:1px solid ${c.border};margin:1px 2px 1px 0;">${s}</span>`;
+    }).join('');
+  },
+
+  STOCK_PAGE_SIZE: 100,
+
+  renderAppsheet() {
+    const isManager = Auth.isManager();
+    const stock     = DB.getStock();
+    const lowStock  = stock.filter(s => s.stok > 0 && s.stokMin > 0 && s.stok <= s.stokMin);
+    const totalNilai = stock.reduce((s, i) => s + ((i.stok || 0) * (i.hargaJual || i.harga || 0)), 0);
+
+    const kategoriList = [...new Set(stock.map(s => s.kategori).filter(Boolean))].sort();
+    const gudangList   = [...new Set(stock.map(s => s.gudang).filter(Boolean))].sort();
+    const sumberList   = ['KBT','SBI','KDS','manual'];
+
+    const _f  = this._stockFilter || { search: '', kategori: 'all', gudang: 'all', sumber: 'all', page: 0 };
+    const PAGE = this.STOCK_PAGE_SIZE;
+    const page = _f.page || 0;
+
+    // ── Filter ──
+    let filtered = stock;
+    if (_f.kategori !== 'all') filtered = filtered.filter(s => s.kategori === _f.kategori);
+    if (_f.gudang   !== 'all') filtered = filtered.filter(s => s.gudang   === _f.gudang);
+    if (_f.sumber   !== 'all') {
+      filtered = filtered.filter(s => {
+        const srcs = Array.isArray(s.sumber) ? s.sumber : [s.sumber || 'manual'];
+        return srcs.includes(_f.sumber);
+      });
+    }
+    if (_f.search) {
+      const q = _f.search.toLowerCase();
+      filtered = filtered.filter(s =>
+        (s.kode || '').toLowerCase().includes(q) ||
+        (s.nama || '').toLowerCase().includes(q) ||
+        (s.pemasok || '').toLowerCase().includes(q)
+      );
+    }
+    filtered.sort((a, b) => (a.kode || '').localeCompare(b.kode || ''));
+
+    // ── Paginate: hanya render 100 baris sekaligus ──
+    const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE));
+    const safePage   = Math.min(page, totalPages - 1);
+    const pageSlice  = filtered.slice(safePage * PAGE, (safePage + 1) * PAGE);
+
+    const rows = pageSlice.map(item => {
+      const isLow  = item.stok > 0 && item.stokMin > 0 && item.stok <= item.stokMin;
+      const hJual  = item.hargaJual || 0;
+      const diskon = item.diskon !== undefined && item.diskon !== '' ? item.diskon : '–';
+      return `
+      <tr>
+        <td style="font-size:11px;font-weight:700;color:var(--primary);white-space:nowrap;">${item.kode}</td>
+        <td style="max-width:240px;"><div style="font-size:12px;font-weight:600;word-break:break-word;">${item.nama}</div></td>
+        <td style="font-size:12px;color:var(--text-muted);white-space:nowrap;">${item.gudang || '–'}</td>
+        <td style="text-align:center;">
+          <span style="font-size:13px;font-weight:800;color:${isLow ? '#dc2626' : 'var(--success)'};">${item.stok ?? '–'}</span>
+          ${isLow ? `<div style="font-size:9px;color:#dc2626;font-weight:700;">⚠ Kritis</div>` : ''}
+        </td>
+        <td style="font-size:12px;font-weight:600;white-space:nowrap;">${hJual ? DB.formatRupiah(hJual) : '–'}</td>
+        <td style="font-size:12px;text-align:center;color:var(--text-secondary);">${diskon !== '–' ? diskon + '%' : '–'}</td>
+        <td style="font-size:11px;color:var(--text-muted);">${item.kategori || '–'}</td>
+        <td style="font-size:11px;color:var(--text-muted);max-width:150px;word-break:break-word;">${item.pemasok || '–'}</td>
+        <td>${this.renderSumberBadges(item.sumber)}</td>
+        <td></td>
+      </tr>`;
+    }).join('');
+
+    const emptyRow = `<tr><td colspan="10" style="text-align:center;padding:40px;color:var(--text-muted);">Tidak ada data stock</td></tr>`;
+
+    // ── Pagination controls ──
+    const from = filtered.length === 0 ? 0 : safePage * PAGE + 1;
+    const to   = Math.min((safePage + 1) * PAGE, filtered.length);
+    const paginationBtns = totalPages <= 1 ? '' : (() => {
+      let btns = '';
+      const maxShow = 5;
+      let start = Math.max(0, safePage - 2);
+      let end   = Math.min(totalPages - 1, start + maxShow - 1);
+      if (end - start < maxShow - 1) start = Math.max(0, end - maxShow + 1);
+
+      btns += `<button class="btn btn-ghost btn-sm" ${safePage === 0 ? 'disabled' : ''} onclick="App.filterStock('page',${safePage-1})" style="padding:4px 10px;">‹</button>`;
+      for (let i = start; i <= end; i++) {
+        btns += `<button class="btn btn-sm ${i === safePage ? 'btn-primary' : 'btn-ghost'}" onclick="App.filterStock('page',${i})" style="padding:4px 10px;min-width:34px;">${i+1}</button>`;
+      }
+      btns += `<button class="btn btn-ghost btn-sm" ${safePage >= totalPages-1 ? 'disabled' : ''} onclick="App.filterStock('page',${safePage+1})" style="padding:4px 10px;">›</button>`;
+      return btns;
+    })();
+
+    // ── Import icon ──
+    const importIcon = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>`;
+
+    return `
+    <div class="fade-in">
+      <!-- Header -->
+      <div class="page-header" style="margin-bottom:20px;flex-wrap:wrap;gap:12px;">
+        <div class="page-header-left">
+          <h1 style="font-size:22px;font-weight:800;">Appsheet v.7</h1>
+          <p style="color:var(--text-muted);font-size:13px;margin-top:3px;">Penggabungan database stock dari KBT · SBI · KDS</p>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+          ${isManager ? `
+          <!-- Import hanya untuk Manager -->
+          <div style="display:flex;border:1px solid var(--border);border-radius:var(--radius-md);overflow:hidden;flex-shrink:0;">
+            <label class="stock-import-btn" style="border-right:1px solid var(--border);" title="Import file KBT Excel">
+              ${importIcon} KBT
+              <input type="file" accept=".xlsx,.xls" style="display:none;" onchange="App.importStockExcel(this,'KBT')" />
+            </label>
+            <label class="stock-import-btn" style="border-right:1px solid var(--border);" title="Import file SBI Excel">
+              ${importIcon} SBI
+              <input type="file" accept=".xlsx,.xls" style="display:none;" onchange="App.importStockExcel(this,'SBI')" />
+            </label>
+            <label class="stock-import-btn" title="Import file KDS Excel">
+              ${importIcon} KDS
+              <input type="file" accept=".xlsx,.xls" style="display:none;" onchange="App.importStockExcel(this,'KDS')" />
+            </label>
+          </div>
+          <button class="btn btn-secondary btn-sm" onclick="App.exportStockExcel()" title="Export semua data ke Excel">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+            Export Excel
+          </button>
+          <button class="btn btn-ghost btn-sm" onclick="App.openStockForm()" title="Tambah item manual">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            Tambah Manual
+          </button>` : `
+          <div style="font-size:12px;color:var(--text-muted);padding:8px 12px;background:var(--bg-input);border-radius:var(--radius-md);border:1px solid var(--border-subtle);">
+            Data dikelola oleh Manager. Perubahan akan tersinkron otomatis ke akun Anda.
+          </div>`}
+        </div>
+      </div>
+
+      <!-- Sumber legend -->
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:16px;padding:10px 14px;background:var(--bg-card);border:1px solid var(--border-subtle);border-radius:var(--radius-md);">
+        <span style="font-size:12px;color:var(--text-muted);font-weight:600;">Sumber data:</span>
+        ${Object.entries(this.SUMBER_CFG).map(([k,c]) => {
+          const cnt = stock.filter(s => (Array.isArray(s.sumber) ? s.sumber : [s.sumber||'manual']).includes(k)).length;
+          return `<span style="display:flex;align-items:center;gap:5px;font-size:12px;">
+            <span style="width:9px;height:9px;border-radius:50%;background:${c.color};flex-shrink:0;"></span>
+            <strong>${k}</strong><span style="color:var(--text-muted);"> (${cnt})</span>
+          </span>`;
+        }).join('')}
+        <span style="margin-left:auto;font-size:11px;color:var(--text-muted);">
+          Kunci: <strong>Kode + Gudang</strong>. Data multi-sumber digabung otomatis.
+        </span>
+      </div>
+
+      <!-- Stat Cards -->
+      <div class="stats-grid" style="margin-bottom:16px;">
+        <div class="stat-card">
+          <div class="stat-icon info"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-4 0v2"/></svg></div>
+          <div class="stat-value">${stock.length}</div>
+          <div class="stat-label">Total Item</div>
+          <div class="stat-change" style="color:var(--text-muted);">${gudangList.length} gudang</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon" style="background:rgba(220,38,38,0.1);color:#dc2626;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></div>
+          <div class="stat-value" style="color:#dc2626;">${lowStock.length}</div>
+          <div class="stat-label">Stok Kritis</div>
+          <div class="stat-change down">${lowStock.length > 0 ? 'Perlu restock' : 'Semua aman'}</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon success"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></div>
+          <div class="stat-value" style="font-size:16px;">${DB.formatRupiah(totalNilai)}</div>
+          <div class="stat-label">Total Nilai Stock</div>
+          <div class="stat-change up"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="18 15 12 9 6 15"/></svg>Harga jual × qty</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-icon primary"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></div>
+          <div class="stat-value">${gudangList.length}</div>
+          <div class="stat-label">Gudang Aktif</div>
+          <div class="stat-change" style="color:var(--text-muted);font-size:10px;">${gudangList.slice(0,3).join(' · ')}</div>
+        </div>
+      </div>
+
+      <!-- Toolbar filter -->
+      <div class="card" style="padding:10px 14px;margin-bottom:4px;">
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+          <div class="search-input-wrap" style="flex:1;min-width:180px;">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+            <input type="text" class="search-input" id="stock-search" placeholder="Cari kode, nama, pemasok..."
+              value="${_f.search}" oninput="App.filterStock('search', this.value)" />
+          </div>
+          <select class="form-control" style="width:auto;min-width:115px;padding:7px 10px;font-size:12px;" onchange="App.filterStock('sumber',this.value)">
+            <option value="all" ${_f.sumber==='all'?'selected':''}>Semua Sumber</option>
+            ${sumberList.map(s=>`<option value="${s}" ${_f.sumber===s?'selected':''}>${s}</option>`).join('')}
+          </select>
+          <select class="form-control" style="width:auto;min-width:135px;padding:7px 10px;font-size:12px;" onchange="App.filterStock('kategori',this.value)">
+            <option value="all" ${_f.kategori==='all'?'selected':''}>Semua Kategori</option>
+            ${kategoriList.map(k=>`<option value="${k}" ${_f.kategori===k?'selected':''}>${k}</option>`).join('')}
+          </select>
+          <select class="form-control" style="width:auto;min-width:135px;padding:7px 10px;font-size:12px;" onchange="App.filterStock('gudang',this.value)">
+            <option value="all" ${_f.gudang==='all'?'selected':''}>Semua Gudang</option>
+            ${gudangList.map(g=>`<option value="${g}" ${_f.gudang===g?'selected':''}>${g}</option>`).join('')}
+          </select>
+          <span style="font-size:12px;color:var(--text-muted);flex-shrink:0;">${filtered.length} item</span>
+        </div>
+      </div>
+
+      <!-- Table -->
+      <div class="card" style="padding:0;overflow:hidden;margin-top:4px;">
+        <div class="table-wrapper">
+          <table class="table" id="stock-table">
+            <thead>
+              <tr>
+                <th>Kode Barang</th>
+                <th>Nama Barang</th>
+                <th>Nama Gudang</th>
+                <th style="text-align:center;">Kuantitas</th>
+                <th>Def. Hrg. Jual</th>
+                <th style="text-align:center;">Diskon (%)</th>
+                <th>Kategori</th>
+                <th>Pemasok</th>
+                <th>Sumber</th>
+                <th style="width:60px;"></th>
+              </tr>
+            </thead>
+            <tbody>${filtered.length > 0 ? rows : emptyRow}</tbody>
+          </table>
+        </div>
+        <!-- Footer: info + pagination -->
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 16px;border-top:1px solid var(--border-subtle);flex-wrap:wrap;gap:8px;">
+          <span style="font-size:12px;color:var(--text-muted);">
+            Menampilkan <strong>${from}–${to}</strong> dari <strong>${filtered.length}</strong> hasil (${stock.length} total item)
+          </span>
+          <div style="display:flex;gap:4px;align-items:center;">${paginationBtns}</div>
+        </div>
+      </div>
+    </div>`;
+  },
+
+  _stockFilter: { search: '', kategori: 'all', gudang: 'all', sumber: 'all', page: 0 },
+
+  filterStock(key, value) {
+    if (!this._stockFilter) this._stockFilter = { search: '', kategori: 'all', gudang: 'all', sumber: 'all', page: 0 };
+    this._stockFilter[key] = key === 'page' ? Number(value) : value;
+    // Reset halaman saat filter berubah (kecuali page itu sendiri)
+    if (key !== 'page') this._stockFilter.page = 0;
+    const content = document.getElementById('page-content');
+    if (content) content.innerHTML = this.renderAppsheet();
+    if (key === 'search') {
+      const el = document.getElementById('stock-search');
+      if (el) { el.focus(); el.setSelectionRange(el.value.length, el.value.length); }
+    }
+  },
+
+  openStockForm(id) {
+    const item = id ? DB.getStockById(id) : null;
+    const title = item ? 'Edit Item Stock' : 'Tambah Item Stock';
+
+    const fmtNum = n => n ? Number(n).toLocaleString('id-ID') : '';
+
+    App.openModal(title, `
+      <div style="display:flex;flex-direction:column;gap:16px;">
+        <div class="form-row form-row-2">
+          <div class="form-group">
+            <label class="form-label">Kode Barang</label>
+            <input type="text" class="form-control" id="sf-kode" placeholder="Cth: ALK-001"
+              value="${item ? item.kode : ''}" ${item ? 'readonly style="background:var(--bg-input);color:var(--text-muted);"' : ''} />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Satuan</label>
+            <input type="text" class="form-control" id="sf-satuan" placeholder="Unit / Box / Pcs"
+              value="${item ? item.satuan : 'Unit'}" />
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Nama Barang</label>
+          <input type="text" class="form-control" id="sf-nama" placeholder="Nama lengkap barang"
+            value="${item ? item.nama : ''}" />
+        </div>
+        <div class="form-row form-row-2">
+          <div class="form-group">
+            <label class="form-label">Kategori</label>
+            <input type="text" class="form-control" id="sf-kategori" placeholder="Cth: Alat Diagnostik"
+              value="${item ? item.kategori : ''}" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Gudang</label>
+            <input type="text" class="form-control" id="sf-gudang" placeholder="Gudang A / Gudang B"
+              value="${item ? item.gudang : 'Gudang A'}" />
+          </div>
+        </div>
+        <div class="form-row form-row-3">
+          <div class="form-group">
+            <label class="form-label">Stok Saat Ini</label>
+            <input type="text" class="form-control" id="sf-stok"
+              placeholder="0" value="${item ? fmtNum(item.stok) : ''}"
+              oninput="this.value=this.value.replace(/\\D/g,'')" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Stok Minimum</label>
+            <input type="text" class="form-control" id="sf-stokmin"
+              placeholder="0" value="${item ? fmtNum(item.stokMin) : ''}"
+              oninput="this.value=this.value.replace(/\\D/g,'')" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">Harga Satuan (Rp)</label>
+            <input type="text" class="form-control" id="sf-harga"
+              placeholder="0" value="${item ? fmtNum(item.harga) : ''}"
+              oninput="this.value=this.value.replace(/[^0-9]/g,'').replace(/(\\d)(?=(\\d{3})+$)/g,'$1.')" />
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Keterangan</label>
+          <input type="text" class="form-control" id="sf-ket" placeholder="Catatan tambahan (opsional)"
+            value="${item ? (item.keterangan || '') : ''}" />
+        </div>
+        <div class="form-actions">
+          <button class="btn btn-ghost" onclick="App.closeModal()">Batal</button>
+          <button class="btn btn-primary" onclick="App.saveStockForm('${id || ''}')">
+            ${item ? 'Simpan Perubahan' : 'Tambah Item'}
+          </button>
+        </div>
+      </div>
+    `);
+  },
+
+  saveStockForm(id) {
+    const kode     = document.getElementById('sf-kode').value.trim().toUpperCase();
+    const nama     = document.getElementById('sf-nama').value.trim();
+    const kategori = document.getElementById('sf-kategori').value.trim();
+    const satuan   = document.getElementById('sf-satuan').value.trim();
+    const gudang   = document.getElementById('sf-gudang').value.trim();
+    const stok     = parseInt(document.getElementById('sf-stok').value.replace(/\D/g, '')) || 0;
+    const stokMin  = parseInt(document.getElementById('sf-stokmin').value.replace(/\D/g, '')) || 0;
+    const harga    = parseInt(document.getElementById('sf-harga').value.replace(/\D/g, '')) || 0;
+    const ket      = document.getElementById('sf-ket').value.trim();
+
+    if (!kode) { App.Toast.show('Masukkan kode barang', 'warning'); return; }
+    if (!nama) { App.Toast.show('Masukkan nama barang', 'warning'); return; }
+
+    const payload = { kode, nama, kategori, satuan, stok, stokMin, harga, gudang, keterangan: ket };
+
+    if (id) {
+      DB.updateStock(id, payload);
+      App.Toast.show('Item berhasil diperbarui', 'success');
+    } else {
+      if (DB.getStockByKode(kode)) { App.Toast.show('Kode barang sudah ada', 'warning'); return; }
+      DB.addStock({ id: DB.genId(), ...payload, updatedAt: DB.today() });
+      App.Toast.show('Item berhasil ditambahkan', 'success');
+    }
+    App.closeModal();
+    const content = document.getElementById('page-content');
+    if (content) content.innerHTML = this.renderAppsheet();
+  },
+
+  deleteStock(id) {
+    const item = DB.getStockById(id);
+    if (!item) return;
+    if (!confirm(`Hapus "${item.nama}" dari stock?`)) return;
+    DB.deleteStock(id);
+    App.Toast.show('Item dihapus', 'success');
+    const content = document.getElementById('page-content');
+    if (content) content.innerHTML = this.renderAppsheet();
+  },
+
+  // ── Export semua data stock ke Excel ──
+  exportStockExcel() {
+    if (typeof XLSX === 'undefined') { App.Toast.show('Library Excel belum siap, coba refresh halaman', 'error'); return; }
+    const stock = DB.getStock();
+    const rows  = stock.map(s => ({
+      'Kode Barang':             s.kode,
+      'Nama Barang':             s.nama,
+      'Nama Gudang':             s.gudang || '',
+      'Kuantitas':               s.stok ?? 0,
+      'Def. Hrg. Jual Satuan #1': s.hargaJual || 0,
+      'Default Diskon (%)':      s.diskon  || 0,
+      'Satuan':                  s.satuan  || '',
+      'Kategori Barang':         s.kategori || '',
+      'Nama Lengkap Kontak Utama Pemasok Utama': s.pemasok || '',
+      'Sumber':                  Array.isArray(s.sumber) ? s.sumber.join(', ') : (s.sumber || 'manual'),
+      'Terakhir Update':         s.updatedAt || '',
+    }));
+    const ws = XLSX.utils.json_to_sheet(rows);
+    ws['!cols'] = [14,40,28,10,22,18,10,22,35,14,14].map(w => ({ wch: w }));
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Stock Gudang');
+    XLSX.writeFile(wb, `stock_gudang_${DB.today()}.xlsx`);
+    App.Toast.show(`${rows.length} item berhasil diekspor`, 'success');
+  },
+
+  // ── Download template Excel kosong ──
+  downloadStockTemplate() {
+    if (typeof XLSX === 'undefined') { App.Toast.show('Library Excel belum siap, coba refresh halaman', 'error'); return; }
+    const headers = [['Kode Barang','Nama Barang','Kategori','Satuan','Stok','Stok Minimum','Harga (Rp)','Gudang','Keterangan']];
+    const ws = XLSX.utils.aoa_to_sheet(headers);
+    ws['!cols'] = [12,35,22,10,8,12,18,12,25].map(w => ({ wch: w }));
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Stock Gudang');
+    XLSX.writeFile(wb, 'template_stock_gudang.xlsx');
+    App.Toast.show('Template berhasil diunduh', 'success');
+  },
+
+  // ── Parser per tipe: kembalikan payload standar dari 1 row Excel ──
+  parseStockRow(raw, type) {
+    const str = (v) => (v !== undefined && v !== null ? v.toString().trim() : '');
+    const num = (v) => {
+      if (v === undefined || v === null || v === '') return 0;
+      return parseFloat(str(v).replace(/[^\d.-]/g, '')) || 0;
+    };
+
+    let kode, nama, gudang, stok, hargaJual, diskon, satuan, kategori, pemasok;
+
+    if (type === 'SBI') {
+      // A: Kode Barang, B: Nama Barang, C: Kuantitas,
+      // D: Default Diskon (%), E: Def. Hrg. Jual Satuan #1, F: Satuan, G: Nama Gudang
+      kode      = str(raw['Kode Barang']);
+      nama      = str(raw['Nama Barang']);
+      stok      = num(raw['Kuantitas']);
+      diskon    = num(raw['Default Diskon (%)']);
+      hargaJual = num(raw['Def. Hrg. Jual Satuan #1']);
+      satuan    = str(raw['Satuan']) || 'Unit';
+      gudang    = str(raw['Nama Gudang']);
+      kategori  = '';
+      pemasok   = '';
+
+    } else if (type === 'KBT') {
+      // A: Nama Gudang, B: Kode Barang, C: Nama Barang, D: Kuantitas,
+      // E: Def. Hrg. Jual Satuan #1, F: Default Diskon (%), G: Kategori Barang
+      gudang    = str(raw['Nama Gudang']);
+      kode      = str(raw['Kode Barang']);
+      nama      = str(raw['Nama Barang']);
+      stok      = num(raw['Kuantitas']);
+      hargaJual = num(raw['Def. Hrg. Jual Satuan #1']);
+      diskon    = num(raw['Default Diskon (%)']);
+      satuan    = 'Unit';
+      kategori  = str(raw['Kategori Barang']);
+      pemasok   = '';
+
+    } else if (type === 'KDS') {
+      // A: Nama Gudang, B: Kode Barang, C: Nama Barang, D: Kuantitas,
+      // E: Nama Lengkap Kontak Utama Pemasok Utama,
+      // F: Def. Hrg. Jual Satuan #1, G: Default Diskon (%)
+      gudang    = str(raw['Nama Gudang']);
+      kode      = str(raw['Kode Barang']);
+      nama      = str(raw['Nama Barang']);
+      stok      = num(raw['Kuantitas']);
+      pemasok   = str(raw['Nama Lengkap Kontak Utama Pemasok Utama']);
+      hargaJual = num(raw['Def. Hrg. Jual Satuan #1']);
+      diskon    = num(raw['Default Diskon (%)']);
+      satuan    = 'Unit';
+      kategori  = '';
+
+    } else {
+      // Generic / template manual
+      kode      = str(raw['Kode Barang']);
+      nama      = str(raw['Nama Barang']);
+      kategori  = str(raw['Kategori']);
+      satuan    = str(raw['Satuan']) || 'Unit';
+      stok      = num(raw['Stok'] ?? raw['Kuantitas']);
+      hargaJual = num(raw['Harga (Rp)'] ?? raw['Def. Hrg. Jual Satuan #1']);
+      diskon    = num(raw['Default Diskon (%)']);
+      gudang    = str(raw['Gudang'] ?? raw['Nama Gudang']) || 'Gudang A';
+      pemasok   = str(raw['Pemasok'] ?? raw['Nama Lengkap Kontak Utama Pemasok Utama']);
+    }
+
+    return { kode, nama, gudang, stok, hargaJual, diskon, satuan, kategori, pemasok, sumber: type };
+  },
+
+  // ── Import Excel (KBT / SBI / KDS) — bulk upsert untuk performa optimal ──
+  importStockExcel(input, type = 'generic') {
+    const file = input.files[0];
+    if (!file) return;
+    if (typeof XLSX === 'undefined') { App.Toast.show('Library Excel belum siap, coba refresh', 'error'); return; }
+
+    App.Toast.show(`Membaca file ${type}...`, 'info');
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      // Gunakan setTimeout agar browser sempat render toast sebelum komputasi berat
+      setTimeout(() => {
+        try {
+          const wb   = XLSX.read(e.target.result, { type: 'array' });
+          const ws   = wb.Sheets[wb.SheetNames[0]];
+          const data = XLSX.utils.sheet_to_json(ws, { defval: '' });
+
+          if (!data.length) { App.Toast.show('File kosong atau format tidak dikenali', 'warning'); return; }
+
+          // Petakan semua baris ke format standar dulu
+          const rows = data
+            .map(raw => this.parseStockRow(raw, type))
+            .filter(r => r.kode);                         // buang baris tanpa kode
+
+          // Bulk upsert: baca localStorage 1×, proses semua, tulis 1×
+          const result = DB.bulkUpsertStockByKodeGudang(rows);
+          const skipped = data.length - rows.length;
+
+          // Reset ke halaman 1, refresh
+          if (this._stockFilter) this._stockFilter.page = 0;
+          const content = document.getElementById('page-content');
+          if (content) content.innerHTML = this.renderAppsheet();
+
+          App.Toast.show(
+            `[${type}] Selesai: ${result.updated} diperbarui, ${result.added} ditambah${(skipped + result.skipped) > 0 ? ', ' + (skipped + result.skipped) + ' dilewati' : ''}`,
+            'success'
+          );
+        } catch (err) {
+          console.error('Import error:', err);
+          App.Toast.show(`Gagal membaca file ${type}. Pastikan format .xlsx benar.`, 'error');
+        }
+        input.value = '';
+      }, 50);
+    };
+    reader.readAsArrayBuffer(file);
   },
 
   renderSalesDashboard(user) {
@@ -181,10 +824,12 @@ const App = {
           `<div style="display:flex;flex-direction:column;gap:8px;">
             ${recentTxs.map(tx => {
               const doc = DB.getDoctorById(tx.doctorId);
+              const doctorName = doc ? doc.name : tx.doctorId || '–';
+              const initials = doc ? DB.initials(doc.name) : DB.initials(tx.doctorId);
               return `<div style="display:flex;align-items:center;gap:12px;padding:10px;background:var(--bg-input);border-radius:var(--radius-md);">
-                <div style="width:36px;height:36px;border-radius:50%;background:var(--grad-primary);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex-shrink:0;">${doc ? DB.initials(doc.name) : '?'}</div>
+                <div style="width:36px;height:36px;border-radius:50%;background:var(--grad-primary);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700;flex-shrink:0;">${initials}</div>
                 <div style="flex:1;min-width:0;">
-                  <div style="font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${doc ? doc.name : '–'}</div>
+                  <div style="font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${doctorName}</div>
                   <div style="font-size:11px;color:var(--text-muted);">${DB.formatDateShort(tx.date)}</div>
                 </div>
                 <div style="text-align:right;flex-shrink:0;">
@@ -295,7 +940,7 @@ const App = {
       <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;margin-top:24px;">
         ${[
           {page:'transactions',icon:'📋',label:'Semua Transaksi',sub:'Riwayat lengkap tim'},
-          {page:'loyalty',icon:'⭐',label:'Loyalty Stamp',sub:'Distribusi stamp dokter'},
+          {page:'loyalty',icon:'⭐',label:'Loyalty Program',sub:'Distribusi stamp dokter'},
           {page:'products',icon:'📊',label:'Best Products',sub:'Analitik produk terlaris'},
           {page:'leaderboard',icon:'🏆',label:'Leaderboard',sub:'Peringkat sales'},
           {page:'manager',icon:'🎯',label:'Set Target',sub:'Kelola target individu'},
