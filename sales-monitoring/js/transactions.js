@@ -228,6 +228,42 @@ const Transactions = {
       </tr>`;
     }).join('');
 
+    // ── Kartu mobile (ditampilkan saat layar kecil / mobile-preview) ──
+    const mobileCards = txs.map(tx => {
+      const doc        = DB.getDoctorById(tx.doctorId);
+      const doctorName = doc ? doc.name : tx.doctorId || '–';
+      const doctorClinic = doc ? doc.clinic : '';
+      const salesUser  = DB.getUserById(tx.salesId);
+      const itemsText  = Array.isArray(tx.items) ? tx.items.map(i => i.productName).join(', ') : (tx.notes || '–');
+      return `
+      <div class="tx-card">
+        <div class="tx-card-top">
+          <span class="tx-card-date">${tx.date}</span>
+          <span class="tx-card-amount">${DB.formatRupiah(tx.totalAmount)}</span>
+        </div>
+        ${tx.stampGiven > 0 ? '<span class="badge badge-gold" style="font-size:9px;padding:2px 6px;margin-bottom:6px;display:inline-block;">⭐ +1 Stamp</span>' : ''}
+        <div class="tx-card-doctor">${doctorName}</div>
+        ${doctorClinic ? `<div class="tx-card-sub">${doctorClinic}</div>` : ''}
+        ${isManager && salesUser ? `<div class="tx-card-sales">Sales: ${salesUser.name}</div>` : ''}
+        <div class="tx-card-items">${itemsText}</div>
+        <div class="tx-card-actions">
+          <button class="btn btn-ghost btn-sm" onclick="Transactions.showDetail('${tx.id}')">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+            Detail
+          </button>
+          ${!isManager ? `
+          <button class="btn btn-secondary btn-sm" onclick="Transactions.editTransaction('${tx.id}')">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+            Edit
+          </button>
+          <button class="btn btn-danger btn-sm" onclick="Transactions.confirmDelete('${tx.id}')">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+            Hapus
+          </button>` : ''}
+        </div>
+      </div>`;
+    }).join('');
+
     return `
     <div class="table-wrapper">
       <table class="table" id="tx-table">
@@ -242,7 +278,8 @@ const Transactions = {
         </thead>
         <tbody id="tx-tbody">${rows}</tbody>
       </table>
-    </div>`;
+    </div>
+    <div class="tx-mobile-cards">${mobileCards}</div>`;
   },
 
   filterTable() {

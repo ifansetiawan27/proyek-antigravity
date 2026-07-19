@@ -1482,29 +1482,41 @@ body.mobile-preview .btn-sm {
   padding: 6px 10px;
 }
 body.mobile-preview .transactions-grid {
-  grid-template-columns: 1fr;
+  grid-template-columns: 1fr !important;
 }
 body.mobile-preview .transactions-grid > .card {
   width: 100%;
 }
+/* Form Pencatatan: hilangkan sticky di mobile preview */
+body.mobile-preview .transactions-grid > .card:first-child {
+  position: static !important;
+}
+/* Filter bar: stack vertikal */
 body.mobile-preview .filter-row {
-  display: grid;
-  grid-template-columns: 1fr 160px;
-  gap: 12px;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 10px !important;
 }
 body.mobile-preview .filter-month {
-  min-width: 0;
-}
-body.mobile-preview .tx-table {
-  overflow-x: auto;
-}
-body.mobile-preview .tx-table table {
   width: 100%;
   min-width: 0;
 }
-body.mobile-preview .tx-table th,
-body.mobile-preview .tx-table td {
-  white-space: normal !important;
+/* Sembunyikan tabel, tampilkan kartu */
+body.mobile-preview .tx-table .table-wrapper {
+  display: none !important;
+}
+body.mobile-preview .tx-mobile-cards {
+  display: flex !important;
+  flex-direction: column;
+  gap: 10px;
+}
+/* Top doctors: lebih kompak */
+body.mobile-preview #top-doctors-list {
+  gap: 10px;
+}
+body.mobile-preview .grand-total-badge {
+  font-size: 11px;
+  padding: 4px 10px;
 }
 body.mobile-preview .topbar-right {
   flex-wrap: wrap;
@@ -1607,6 +1619,47 @@ body.mobile-preview .topbar-right > div {
 .pipeline-table td { vertical-align: middle; }
 .pipeline-table th { background: var(--bg-input); }
 
+/* ============================================================
+   TRANSAKSI — MOBILE CARD VIEW
+   ============================================================ */
+
+/* Desktop: sembunyikan kartu mobile */
+.tx-mobile-cards { display: none; }
+
+/* Kartu per transaksi */
+.tx-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 14px;
+}
+.tx-card-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 6px;
+}
+.tx-card-date  { font-size: 11px; color: var(--text-muted); padding-top: 2px; }
+.tx-card-amount { font-size: 16px; font-weight: 800; color: var(--text-primary); }
+.tx-card-doctor { font-size: 14px; font-weight: 700; color: var(--text-primary); margin-top: 4px; }
+.tx-card-sub   { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+.tx-card-sales { font-size: 11px; color: var(--primary-light); margin-top: 2px; }
+.tx-card-items {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid var(--border-subtle);
+  line-height: 1.6;
+}
+.tx-card-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+.tx-card-actions .btn { flex: 1; justify-content: center; }
+
 /* Stock import button group (KBT / SBI / KDS) */
 .stock-import-btn {
   display: inline-flex;
@@ -1692,15 +1745,25 @@ body.mobile-preview .topbar-right > div {
   .stamp-grid { grid-template-columns: repeat(4, 1fr); }
   .leaderboard-item { flex-wrap: wrap; }
   .lb-progress { min-width: 100%; order: 5; }
-  .transactions-grid { grid-template-columns: 1fr; }
-  .filter-row { display: grid; grid-template-columns: 1fr 180px; gap: 12px; }
-  .filter-month { min-width: 0; }
-  .tx-table { overflow-x: auto; }
-  .tx-table table { width: 100%; min-width: 0; }
-  .tx-table th,
-  .tx-table td { white-space: normal !important; word-break: break-word; }
-  .tx-table th:last-child,
-  .tx-table td:last-child { min-width: auto; }
+  .transactions-grid { grid-template-columns: 1fr !important; }
+
+  /* Form Pencatatan: hilangkan sticky di mobile */
+  .transactions-grid > .card:first-child { position: static !important; }
+
+  /* Filter bar: stack vertikal */
+  .filter-row { display: flex !important; flex-direction: column !important; gap: 10px !important; }
+  .filter-month { width: 100%; min-width: 0; }
+
+  /* Sembunyikan tabel, tampilkan kartu */
+  .tx-table .table-wrapper { display: none !important; }
+  .tx-mobile-cards { display: flex !important; flex-direction: column; gap: 10px; }
+
+  /* Top doctors: scroll horizontal tetap */
+  #top-doctors-list { gap: 10px; }
+
+  /* Search wrap full width */
+  .tx-table + .tx-mobile-cards,
+  .search-input-wrap { min-width: 0; }
 }
 
 @media (max-width: 480px) {
