@@ -56,6 +56,151 @@ const Auth = {
     document.getElementById('login-password').value = password;
   },
 
+  // ---- Toggle Login ↔ Signup ----
+  toggleForm(mode) {
+    const loginForm     = document.getElementById('login-form');
+    const signupWrapper = document.getElementById('signup-wrapper');
+    const linkToSignup  = document.getElementById('link-to-signup');
+    const linkToLogin   = document.getElementById('link-to-login');
+    const titleEl       = document.querySelector('.login-title');
+    const subtitleEl    = document.querySelector('.login-subtitle');
+
+    // Reset error & success di kedua form
+    ['login-error', 'signup-error'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.classList.add('hidden');
+    });
+    const successEl = document.getElementById('signup-success');
+    if (successEl) successEl.style.display = 'none';
+
+    if (mode === 'signup') {
+      loginForm.classList.add('hidden');
+      signupWrapper.classList.remove('hidden');
+      linkToSignup.classList.add('hidden');
+      linkToLogin.classList.remove('hidden');
+      if (titleEl)    titleEl.textContent    = 'Buat Akun Baru';
+      if (subtitleEl) subtitleEl.textContent = 'Daftarkan akun @sales.com Anda';
+    } else {
+      loginForm.classList.remove('hidden');
+      signupWrapper.classList.add('hidden');
+      linkToSignup.classList.remove('hidden');
+      linkToLogin.classList.add('hidden');
+      if (titleEl)    titleEl.textContent    = 'Selamat Datang Kembali';
+      if (subtitleEl) subtitleEl.textContent = 'Masuk ke akun Anda untuk melanjutkan';
+    }
+  },
+
+  // ---- Signup ----
+  async signup() {
+    const name            = document.getElementById('signup-name').value.trim();
+    const email           = document.getElementById('signup-email').value.trim().toLowerCase();
+    const password        = document.getElementById('signup-password').value;
+    const confirmPassword = document.getElementById('signup-confirm').value;
+    const errEl           = document.getElementById('signup-error');
+    const successEl       = document.getElementById('signup-success');
+    const btn             = document.getElementById('signup-btn');
+
+    const showErr = (msg) => {
+      errEl.classList.remove('hidden');
+      errEl.lastChild.textContent = ' ' + msg;
+    };
+
+    errEl.classList.add('hidden');
+    if (successEl) successEl.style.display = 'none';
+
+    // Validasi
+    if (!name)                          return showErr('Mohon isi nama lengkap');
+    if (!email)                         return showErr('Mohon isi email');
+    if (!email.endsWith('@sales.com'))  return showErr('Email harus menggunakan domain @sales.com');
+    if (!password)                      return showErr('Mohon isi password');
+    if (password.length < 6)           return showErr('Password minimal 6 karakter');
+    if (password !== confirmPassword)  return showErr('Konfirmasi password tidak cocok');
+
+    if (!DB.remoteClient) return showErr('Tidak ada koneksi ke Supabase. Periksa config.js');
+
+    // Username = prefix email (misal: ifan dari ifan@sales.com)
+    const username = email.split('@')[0];
+
+    // Cek username sudah ada di local cache
+    if (DB.getUserByUsername(username)) {
+      return showErr(`Username "${username}" sudah digunakan. Gunakan email lain.`);
+    }
+
+    // Loading state
+    const origHtml = btn.innerHTML;
+    btn.disabled = true;
+    btn.innerHTML = `<span style="display:inline-block;width:14px;height:14px;border:2px solid rgba(255,255,255,0.3);border-top-color:white;border-radius:50%;animation:spin .8s linear infinite;margin-right:8px;vertical-align:middle"></span>Mendaftar...`;
+
+    try {
+      // 1. Daftar ke Supabase Authentication (tampil di Auth > Users di dashboard)
+      const { data: authData, error: authError } = await DB.remoteClient.auth.signUp({
+        email,
+        password,
+        options: {
+          data: { name, username, role: 'sales' }
+        }
+      });
+
+      if (authError) {
+        if (authError.message.includes('already registered')) {
+          throw new Error('Email ini sudah terdaftar. Gunakan email lain atau langsung login.');
+        }
+        throw authError;
+      }
+
+      // 2. Insert ke tabel public.users (sistem login aplikasi)
+      const newUser = {
+        id:       DB.genId(),
+        name,
+        username,
+        password, // plain text — konsisten dengan sistem existing
+        role:     'sales',
+        area:     '',
+        target:   0,
+        avatar:   DB.initials(name),
+      };
+
+      const { error: insertError } = await DB.remoteClient
+        .from('users')
+        .insert(newUser);
+
+      if (insertError) {
+        if (insertError.code === '23505') {
+          throw new Error(`Username "${username}" sudah digunakan. Gunakan email lain.`);
+        }
+        throw insertError;
+      }
+
+      // 3. Cache ke localStorage agar bisa langsung login
+      const users = DB.getUsers();
+      users.push(newUser);
+      DB.set(DB.KEYS.users, users);
+
+      // 4. Tampilkan hasil
+      const needsConfirmation = authData.user && !authData.session;
+      if (needsConfirmation) {
+        // Supabase minta konfirmasi email — tampilkan pesan
+        if (successEl) {
+          successEl.style.display = 'flex';
+          successEl.lastChild.textContent = ` Akun berhasil dibuat! Cek email ${email} untuk konfirmasi, lalu login dengan username: ${username}`;
+        }
+        App.Toast.show(`Akun ${name} dibuat! Cek email untuk konfirmasi.`, 'success');
+      } else {
+        // Langsung bisa login — arahkan ke form login
+        App.Toast.show(`Akun ${name} berhasil dibuat! Silakan login.`, 'success');
+        this.toggleForm('login');
+        document.getElementById('login-username').value = username;
+        document.getElementById('login-username').focus();
+      }
+
+    } catch (e) {
+      showErr(e.message || 'Gagal membuat akun. Coba lagi.');
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = origHtml;
+    }
+  },
+
   logout() {
     sessionStorage.removeItem(this.SESSION_KEY);
     document.getElementById('app').classList.add('hidden');
