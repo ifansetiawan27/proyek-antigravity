@@ -6,49 +6,75 @@ const Auth = {
   SESSION_KEY: 'sm_session',
 
   async login() {
-    const username = document.getElementById('login-username').value.trim();
+    const rawInput = document.getElementById('login-username').value.trim();
     const password = document.getElementById('login-password').value.trim();
-    const errEl = document.getElementById('login-error');
+    const errEl    = document.getElementById('login-error');
 
-    if (!username || !password) {
+    if (!rawInput || !password) {
       errEl.classList.remove('hidden');
       errEl.lastChild.textContent = ' Mohon isi username dan password';
       return;
     }
 
-    let user = DB.getUserByUsername(username);
-    if (!user && DB.remoteClient) {
-      user = await DB.fetchUserByUsername(username);
-      if (user) {
-        // Verify password before caching; strip it from the cached record
-        if (user.password !== password) {
-          errEl.classList.remove('hidden');
-          errEl.lastChild.textContent = ' Username atau password salah';
-          return;
+    // Dukung input email (ifan@sales.com) maupun username (ifan)
+    const username = rawInput.includes('@') ? rawInput.split('@')[0] : rawInput;
+
+    // Retry Supabase init jika belum terhubung
+    if (!DB.remoteClient) DB.initRemote();
+
+    // Tampilkan loading state pada tombol
+    const btn = document.getElementById('login-btn');
+    const origHtml = btn ? btn.innerHTML : '';
+    if (btn) {
+      btn.disabled = true;
+      btn.innerHTML = `<span style="display:inline-block;width:14px;height:14px;border:2px solid rgba(255,255,255,0.3);border-top-color:white;border-radius:50%;animation:spin .8s linear infinite;margin-right:8px;vertical-align:middle"></span>Memeriksa...`;
+    }
+
+    try {
+      // 1. Cek cache localStorage dulu
+      let user = DB.getUserByUsername(username);
+
+      // 2. Jika tidak ada di cache, ambil dari Supabase
+      if (!user && DB.remoteClient) {
+        user = await DB.fetchUserByUsername(username);
+        if (user) {
+          // Verifikasi password lalu cache tanpa password
+          if (user.password !== password) {
+            errEl.classList.remove('hidden');
+            errEl.lastChild.textContent = ' Username atau password salah';
+            this._shakeCard();
+            return;
+          }
+          const { password: _pw, ...safeUser } = user;
+          const users = DB.getUsers();
+          users.push(safeUser);
+          DB.set(DB.KEYS.users, users);
+          user = safeUser;
         }
-        const { password: _pw, ...safeUser } = user;
-        const users = DB.getUsers();
-        users.push(safeUser);
-        DB.set(DB.KEYS.users, users);
-        user = safeUser;
       }
-    }
 
-    if (!user || user.password !== password) {
-      errEl.classList.remove('hidden');
-      errEl.lastChild.textContent = ' Username atau password salah';
-      // Shake animation
-      const card = document.querySelector('.login-card');
-      card.style.animation = 'none';
-      setTimeout(() => {
-        card.style.animation = 'shake 0.4s ease';
-      }, 10);
-      return;
-    }
+      // 3. Cek hasil akhir
+      if (!user || user.password !== password) {
+        errEl.classList.remove('hidden');
+        errEl.lastChild.textContent = ' Username atau password salah';
+        this._shakeCard();
+        return;
+      }
 
-    errEl.classList.add('hidden');
-    sessionStorage.setItem(this.SESSION_KEY, JSON.stringify({ id: user.id, role: user.role }));
-    this.onLoginSuccess(user);
+      errEl.classList.add('hidden');
+      sessionStorage.setItem(this.SESSION_KEY, JSON.stringify({ id: user.id, role: user.role }));
+      this.onLoginSuccess(user);
+
+    } finally {
+      if (btn) { btn.disabled = false; btn.innerHTML = origHtml; }
+    }
+  },
+
+  _shakeCard() {
+    const card = document.querySelector('.login-card');
+    if (!card) return;
+    card.style.animation = 'none';
+    setTimeout(() => { card.style.animation = 'shake 0.4s ease'; }, 10);
   },
 
   fillDemo(username, password) {
