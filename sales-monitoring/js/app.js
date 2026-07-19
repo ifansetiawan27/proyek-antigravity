@@ -479,33 +479,7 @@ const App = {
         <span class="appsheet-legend-hint">Kunci: <strong>Kode + Gudang</strong>. Data multi-sumber digabung otomatis.</span>
       </div>
 
-      <!-- Stat Cards -->
-      <div class="stats-grid" style="margin-bottom:16px;">
-        <div class="stat-card">
-          <div class="stat-icon info"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-4 0v2"/></svg></div>
-          <div class="stat-value">${stock.length.toLocaleString()}</div>
-          <div class="stat-label">Total Item</div>
-          <div class="stat-change" style="color:var(--text-muted);">${gudangList.length} gudang</div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-icon" style="background:rgba(220,38,38,0.1);color:#dc2626;"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></div>
-          <div class="stat-value" style="color:#dc2626;">${lowStock.length}</div>
-          <div class="stat-label">Stok Kritis</div>
-          <div class="stat-change down">${lowStock.length > 0 ? 'Perlu restock' : 'Semua aman'}</div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-icon success"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></div>
-          <div class="stat-value" style="font-size:16px;">${DB.formatRupiah(totalNilai)}</div>
-          <div class="stat-label">Total Nilai Stock</div>
-          <div class="stat-change up"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="18 15 12 9 6 15"/></svg>Harga jual × qty</div>
-        </div>
-        <div class="stat-card">
-          <div class="stat-icon primary"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg></div>
-          <div class="stat-value">${gudangList.length}</div>
-          <div class="stat-label">Gudang Aktif</div>
-          <div class="stat-change" style="color:var(--text-muted);font-size:10px;">${gudangList.slice(0,3).join(' · ')}</div>
-        </div>
-      </div>
+
 
       <!-- Toolbar filter (sticky di mobile) -->
       <div class="card appsheet-toolbar">
