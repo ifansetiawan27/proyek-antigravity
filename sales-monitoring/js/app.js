@@ -219,23 +219,15 @@ const App = {
     }).join('');
   },
 
-  STOCK_PAGE_SIZE: 100,
+  STOCK_PAGE_SIZE: 50,
+  _stockFilter: { search: '', kategori: 'all', gudang: 'all', sumber: 'all', page: 0 },
+  _stockViewMode: 'table', // 'table' | 'card'
+  _searchDebounce: null,
 
-  renderAppsheet() {
-    const isManager = Auth.isManager();
-    const stock     = DB.getStock();
-    const lowStock  = stock.filter(s => s.stok > 0 && s.stokMin > 0 && s.stok <= s.stokMin);
-    const totalNilai = stock.reduce((s, i) => s + ((i.stok || 0) * (i.hargaJual || i.harga || 0)), 0);
-
-    const kategoriList = [...new Set(stock.map(s => s.kategori).filter(Boolean))].sort();
-    const gudangList   = [...new Set(stock.map(s => s.gudang).filter(Boolean))].sort();
-    const sumberList   = ['KBT','SBI','KDS','manual'];
-
-    const _f  = this._stockFilter || { search: '', kategori: 'all', gudang: 'all', sumber: 'all', page: 0 };
-    const PAGE = this.STOCK_PAGE_SIZE;
-    const page = _f.page || 0;
-
-    // ── Filter ──
+  // ── Hitung filter sekali, digunakan oleh renderAppsheet & _renderStockResults ──
+  _getFilteredStock() {
+    const stock = DB.getStock();
+    const _f    = this._stockFilter;
     let filtered = stock;
     if (_f.kategori !== 'all') filtered = filtered.filter(s => s.kategori === _f.kategori);
     if (_f.gudang   !== 'all') filtered = filtered.filter(s => s.gudang   === _f.gudang);
@@ -248,24 +240,35 @@ const App = {
     if (_f.search) {
       const q = _f.search.toLowerCase();
       filtered = filtered.filter(s =>
-        (s.kode || '').toLowerCase().includes(q) ||
-        (s.nama || '').toLowerCase().includes(q) ||
-        (s.pemasok || '').toLowerCase().includes(q)
+        (s.kode   || '').toLowerCase().includes(q) ||
+        (s.nama   || '').toLowerCase().includes(q) ||
+        (s.pemasok|| '').toLowerCase().includes(q)
       );
     }
     filtered.sort((a, b) => (a.kode || '').localeCompare(b.kode || ''));
+    return { stock, filtered };
+  },
 
-    // ── Paginate: hanya render 100 baris sekaligus ──
+  // ── Hanya re-render bagian tabel + pagination (jauh lebih cepat) ──
+  _renderStockResults() {
+    const { stock, filtered } = this._getFilteredStock();
+    const _f   = this._stockFilter;
+    const PAGE = this.STOCK_PAGE_SIZE;
+    const page = _f.page || 0;
+
     const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE));
     const safePage   = Math.min(page, totalPages - 1);
     const pageSlice  = filtered.slice(safePage * PAGE, (safePage + 1) * PAGE);
+    const from       = filtered.length === 0 ? 0 : safePage * PAGE + 1;
+    const to         = Math.min((safePage + 1) * PAGE, filtered.length);
+    const isCard     = this._stockViewMode === 'card';
 
-    const rows = pageSlice.map(item => {
+    // ── Baris tabel (desktop) ──
+    const tableRows = pageSlice.map(item => {
       const isLow  = item.stok > 0 && item.stokMin > 0 && item.stok <= item.stokMin;
       const hJual  = item.hargaJual || 0;
       const diskon = item.diskon !== undefined && item.diskon !== '' ? item.diskon : '–';
-      return `
-      <tr>
+      return `<tr>
         <td style="font-size:11px;font-weight:700;color:var(--primary);white-space:nowrap;">${item.kode}</td>
         <td style="max-width:240px;"><div style="font-size:12px;font-weight:600;word-break:break-word;">${item.nama}</div></td>
         <td style="font-size:12px;color:var(--text-muted);white-space:nowrap;">${item.gudang || '–'}</td>
@@ -282,88 +285,205 @@ const App = {
       </tr>`;
     }).join('');
 
-    const emptyRow = `<tr><td colspan="10" style="text-align:center;padding:40px;color:var(--text-muted);">Tidak ada data stock</td></tr>`;
+    // ── Kartu mobile ──
+    const mobileCards = pageSlice.map(item => {
+      const isLow = item.stok > 0 && item.stokMin > 0 && item.stok <= item.stokMin;
+      const hJual = item.hargaJual || 0;
+      return `
+      <div class="stock-mobile-card ${isLow ? 'stock-mobile-card--low' : ''}">
+        <div class="smc-header">
+          <span class="smc-kode">${item.kode || '–'}</span>
+          <div style="display:flex;gap:4px;align-items:center;">
+            ${this.renderSumberBadges(item.sumber)}
+          </div>
+        </div>
+        <div class="smc-nama">${item.nama}</div>
+        <div class="smc-row">
+          <span class="smc-lbl">Gudang</span>
+          <span class="smc-val">${item.gudang || '–'}</span>
+        </div>
+        <div class="smc-row">
+          <span class="smc-lbl">Qty</span>
+          <span class="smc-val ${isLow ? 'smc-kritis' : ''}">${item.stok ?? '–'} ${item.satuan || ''} ${isLow ? '⚠' : ''}</span>
+        </div>
+        <div class="smc-row">
+          <span class="smc-lbl">Hrg Jual</span>
+          <span class="smc-val smc-harga">${hJual ? DB.formatRupiah(hJual) : '–'}</span>
+        </div>
+        ${item.kategori ? `<div class="smc-row"><span class="smc-lbl">Kategori</span><span class="smc-val">${item.kategori}</span></div>` : ''}
+        ${item.pemasok  ? `<div class="smc-row"><span class="smc-lbl">Pemasok</span><span class="smc-val" style="font-size:11px;">${item.pemasok}</span></div>` : ''}
+      </div>`;
+    }).join('');
 
-    // ── Pagination controls ──
-    const from = filtered.length === 0 ? 0 : safePage * PAGE + 1;
-    const to   = Math.min((safePage + 1) * PAGE, filtered.length);
+    const emptyState = `<div style="text-align:center;padding:48px 20px;color:var(--text-muted);">
+      <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="margin-bottom:12px;opacity:0.4;"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+      <div style="font-size:14px;font-weight:600;">Tidak ada data ditemukan</div>
+      <div style="font-size:12px;margin-top:4px;">Coba ubah filter atau kata kunci pencarian</div>
+    </div>`;
+
+    // ── Pagination ──
     const paginationBtns = totalPages <= 1 ? '' : (() => {
       let btns = '';
       const maxShow = 5;
       let start = Math.max(0, safePage - 2);
       let end   = Math.min(totalPages - 1, start + maxShow - 1);
       if (end - start < maxShow - 1) start = Math.max(0, end - maxShow + 1);
-
-      btns += `<button class="btn btn-ghost btn-sm" ${safePage === 0 ? 'disabled' : ''} onclick="App.filterStock('page',${safePage-1})" style="padding:4px 10px;">‹</button>`;
+      btns += `<button class="btn btn-ghost btn-sm" ${safePage===0?'disabled':''} onclick="App.filterStock('page',${safePage-1})" style="padding:4px 10px;">‹</button>`;
       for (let i = start; i <= end; i++) {
-        btns += `<button class="btn btn-sm ${i === safePage ? 'btn-primary' : 'btn-ghost'}" onclick="App.filterStock('page',${i})" style="padding:4px 10px;min-width:34px;">${i+1}</button>`;
+        btns += `<button class="btn btn-sm ${i===safePage?'btn-primary':'btn-ghost'}" onclick="App.filterStock('page',${i})" style="padding:4px 10px;min-width:34px;">${i+1}</button>`;
       }
-      btns += `<button class="btn btn-ghost btn-sm" ${safePage >= totalPages-1 ? 'disabled' : ''} onclick="App.filterStock('page',${safePage+1})" style="padding:4px 10px;">›</button>`;
+      btns += `<button class="btn btn-ghost btn-sm" ${safePage>=totalPages-1?'disabled':''} onclick="App.filterStock('page',${safePage+1})" style="padding:4px 10px;">›</button>`;
       return btns;
     })();
 
-    // ── Import icon ──
-    const importIcon = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>`;
+    return `
+      <!-- Filter info + View toggle -->
+      <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:4px;">
+        <span id="stock-count-badge" style="font-size:12px;color:var(--text-muted);">
+          <strong>${filtered.length}</strong> dari <strong>${stock.length}</strong> item
+        </span>
+        <div style="display:flex;gap:6px;align-items:center;">
+          <button onclick="App.toggleStockView('table')" class="btn btn-sm ${!isCard?'btn-primary':'btn-ghost'}" title="Tampilan Tabel" style="padding:5px 10px;">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="3" y1="15" x2="21" y2="15"/><line x1="9" y1="9" x2="9" y2="21"/></svg>
+            <span class="stock-view-label">Tabel</span>
+          </button>
+          <button onclick="App.toggleStockView('card')" class="btn btn-sm ${isCard?'btn-primary':'btn-ghost'}" title="Tampilan Kartu (Mobile)" style="padding:5px 10px;">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+            <span class="stock-view-label">Kartu</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Tabel (desktop/table mode) -->
+      <div class="card stock-view-table ${isCard?'stock-hidden-on-card':''}" style="padding:0;overflow:hidden;">
+        <div class="table-wrapper">
+          <table class="table" id="stock-table">
+            <thead><tr>
+              <th>Kode Barang</th><th>Nama Barang</th><th>Nama Gudang</th>
+              <th style="text-align:center;">Qty</th><th>Hrg Jual</th>
+              <th style="text-align:center;">Diskon</th><th>Kategori</th>
+              <th>Pemasok</th><th>Sumber</th><th style="width:40px;"></th>
+            </tr></thead>
+            <tbody>${pageSlice.length > 0 ? tableRows : `<tr><td colspan="10">${emptyState}</td></tr>`}</tbody>
+          </table>
+        </div>
+        <div class="stock-footer">
+          <span style="font-size:12px;color:var(--text-muted);">
+            Menampilkan <strong>${from}–${to}</strong> dari <strong>${filtered.length}</strong> hasil
+          </span>
+          <div style="display:flex;gap:4px;">${paginationBtns}</div>
+        </div>
+      </div>
+
+      <!-- Kartu (mobile/card mode) -->
+      <div class="stock-view-cards ${!isCard?'stock-hidden-on-table':''}">
+        ${pageSlice.length > 0 ? mobileCards : emptyState}
+        ${paginationBtns ? `<div style="display:flex;gap:4px;justify-content:center;padding:12px 0;">${paginationBtns}</div>` : ''}
+      </div>`;
+  },
+
+  toggleStockView(mode) {
+    this._stockViewMode = mode;
+    const area = document.getElementById('stock-results-area');
+    if (area) area.innerHTML = this._renderStockResults();
+  },
+
+  // ── Filter + debounce untuk search ──
+  filterStock(key, value) {
+    if (!this._stockFilter) this._stockFilter = { search:'', kategori:'all', gudang:'all', sumber:'all', page:0 };
+    this._stockFilter[key] = key === 'page' ? Number(value) : value;
+    if (key !== 'page') this._stockFilter.page = 0;
+
+    const apply = () => {
+      const area = document.getElementById('stock-results-area');
+      if (area) {
+        area.innerHTML = this._renderStockResults();
+      } else {
+        const content = document.getElementById('page-content');
+        if (content) content.innerHTML = this.renderAppsheet();
+      }
+      if (key === 'search') {
+        const el = document.getElementById('stock-search');
+        if (el) { el.focus(); el.setSelectionRange(el.value.length, el.value.length); }
+      }
+    };
+
+    if (key === 'search') {
+      // Debounce: tunda 250ms, cegah re-render tiap ketukan
+      clearTimeout(this._searchDebounce);
+      this._searchDebounce = setTimeout(apply, 250);
+    } else {
+      apply();
+    }
+  },
+
+  renderAppsheet() {
+    const isManager  = Auth.isManager();
+    const stock      = DB.getStock();
+    const lowStock   = stock.filter(s => s.stok > 0 && s.stokMin > 0 && s.stok <= s.stokMin);
+    const totalNilai = stock.reduce((s, i) => s + ((i.stok || 0) * (i.hargaJual || i.harga || 0)), 0);
+    const kategoriList = [...new Set(stock.map(s => s.kategori).filter(Boolean))].sort();
+    const gudangList   = [...new Set(stock.map(s => s.gudang).filter(Boolean))].sort();
+    const sumberList   = ['KBT','SBI','KDS','manual'];
+    const _f           = this._stockFilter;
+    const importIcon   = `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>`;
 
     return `
     <div class="fade-in">
       <!-- Header -->
-      <div class="page-header" style="margin-bottom:20px;flex-wrap:wrap;gap:12px;">
+      <div class="appsheet-header">
         <div class="page-header-left">
           <h1 style="font-size:22px;font-weight:800;">Appsheet v.7</h1>
           <p style="color:var(--text-muted);font-size:13px;margin-top:3px;">Penggabungan database stock dari KBT · SBI · KDS</p>
         </div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
+        <div class="appsheet-actions">
           ${isManager ? `
-          <!-- Import hanya untuk Manager -->
-          <div style="display:flex;border:1px solid var(--border);border-radius:var(--radius-md);overflow:hidden;flex-shrink:0;">
-            <label class="stock-import-btn" style="border-right:1px solid var(--border);" title="Import file KBT Excel">
+          <div class="appsheet-import-group">
+            <label class="stock-import-btn" style="border-right:1px solid var(--border);" title="Import KBT">
               ${importIcon} KBT
               <input type="file" accept=".xlsx,.xls" style="display:none;" onchange="App.importStockExcel(this,'KBT')" />
             </label>
-            <label class="stock-import-btn" style="border-right:1px solid var(--border);" title="Import file SBI Excel">
+            <label class="stock-import-btn" style="border-right:1px solid var(--border);" title="Import SBI">
               ${importIcon} SBI
               <input type="file" accept=".xlsx,.xls" style="display:none;" onchange="App.importStockExcel(this,'SBI')" />
             </label>
-            <label class="stock-import-btn" title="Import file KDS Excel">
+            <label class="stock-import-btn" title="Import KDS">
               ${importIcon} KDS
               <input type="file" accept=".xlsx,.xls" style="display:none;" onchange="App.importStockExcel(this,'KDS')" />
             </label>
           </div>
-          <button class="btn btn-secondary btn-sm" onclick="App.exportStockExcel()" title="Export semua data ke Excel">
+          <button class="btn btn-secondary btn-sm" onclick="App.exportStockExcel()">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-            Export Excel
+            <span class="appsheet-btn-label">Export Excel</span>
           </button>
-          <button class="btn btn-ghost btn-sm" onclick="App.openStockForm()" title="Tambah item manual">
+          <button class="btn btn-ghost btn-sm" onclick="App.openStockForm()">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-            Tambah Manual
+            <span class="appsheet-btn-label">Tambah Manual</span>
           </button>` : `
           <div style="font-size:12px;color:var(--text-muted);padding:8px 12px;background:var(--bg-input);border-radius:var(--radius-md);border:1px solid var(--border-subtle);">
-            Data dikelola oleh Manager. Perubahan akan tersinkron otomatis ke akun Anda.
+            Data dikelola oleh Manager.
           </div>`}
         </div>
       </div>
 
       <!-- Sumber legend -->
-      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:16px;padding:10px 14px;background:var(--bg-card);border:1px solid var(--border-subtle);border-radius:var(--radius-md);">
-        <span style="font-size:12px;color:var(--text-muted);font-weight:600;">Sumber data:</span>
+      <div class="appsheet-legend">
+        <span style="font-size:12px;color:var(--text-muted);font-weight:600;white-space:nowrap;">Sumber data:</span>
         ${Object.entries(this.SUMBER_CFG).map(([k,c]) => {
-          const cnt = stock.filter(s => (Array.isArray(s.sumber) ? s.sumber : [s.sumber||'manual']).includes(k)).length;
+          const cnt = stock.filter(s => (Array.isArray(s.sumber)?s.sumber:[s.sumber||'manual']).includes(k)).length;
           return `<span style="display:flex;align-items:center;gap:5px;font-size:12px;">
             <span style="width:9px;height:9px;border-radius:50%;background:${c.color};flex-shrink:0;"></span>
-            <strong>${k}</strong><span style="color:var(--text-muted);"> (${cnt})</span>
+            <strong>${k}</strong> <span style="color:var(--text-muted);">(${cnt})</span>
           </span>`;
         }).join('')}
-        <span style="margin-left:auto;font-size:11px;color:var(--text-muted);">
-          Kunci: <strong>Kode + Gudang</strong>. Data multi-sumber digabung otomatis.
-        </span>
+        <span class="appsheet-legend-hint">Kunci: <strong>Kode + Gudang</strong>. Data multi-sumber digabung otomatis.</span>
       </div>
 
       <!-- Stat Cards -->
       <div class="stats-grid" style="margin-bottom:16px;">
         <div class="stat-card">
           <div class="stat-icon info"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V5a2 2 0 0 0-4 0v2"/></svg></div>
-          <div class="stat-value">${stock.length}</div>
+          <div class="stat-value">${stock.length.toLocaleString()}</div>
           <div class="stat-label">Total Item</div>
           <div class="stat-change" style="color:var(--text-muted);">${gudangList.length} gudang</div>
         </div>
@@ -387,75 +507,36 @@ const App = {
         </div>
       </div>
 
-      <!-- Toolbar filter -->
-      <div class="card" style="padding:10px 14px;margin-bottom:4px;">
-        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;">
-          <div class="search-input-wrap" style="flex:1;min-width:180px;">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
-            <input type="text" class="search-input" id="stock-search" placeholder="Cari kode, nama, pemasok..."
-              value="${_f.search}" oninput="App.filterStock('search', this.value)" />
-          </div>
-          <select class="form-control" style="width:auto;min-width:115px;padding:7px 10px;font-size:12px;" onchange="App.filterStock('sumber',this.value)">
+      <!-- Toolbar filter (sticky di mobile) -->
+      <div class="card appsheet-toolbar">
+        <div class="search-input-wrap" style="flex:1;min-width:180px;">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+          <input type="text" class="search-input" id="stock-search"
+            placeholder="Cari kode, nama, pemasok..."
+            value="${_f.search}"
+            oninput="App.filterStock('search', this.value)" />
+        </div>
+        <div class="appsheet-selects">
+          <select class="form-control appsheet-select" onchange="App.filterStock('sumber',this.value)">
             <option value="all" ${_f.sumber==='all'?'selected':''}>Semua Sumber</option>
             ${sumberList.map(s=>`<option value="${s}" ${_f.sumber===s?'selected':''}>${s}</option>`).join('')}
           </select>
-          <select class="form-control" style="width:auto;min-width:135px;padding:7px 10px;font-size:12px;" onchange="App.filterStock('kategori',this.value)">
+          <select class="form-control appsheet-select" onchange="App.filterStock('kategori',this.value)">
             <option value="all" ${_f.kategori==='all'?'selected':''}>Semua Kategori</option>
             ${kategoriList.map(k=>`<option value="${k}" ${_f.kategori===k?'selected':''}>${k}</option>`).join('')}
           </select>
-          <select class="form-control" style="width:auto;min-width:135px;padding:7px 10px;font-size:12px;" onchange="App.filterStock('gudang',this.value)">
+          <select class="form-control appsheet-select" onchange="App.filterStock('gudang',this.value)">
             <option value="all" ${_f.gudang==='all'?'selected':''}>Semua Gudang</option>
             ${gudangList.map(g=>`<option value="${g}" ${_f.gudang===g?'selected':''}>${g}</option>`).join('')}
           </select>
-          <span style="font-size:12px;color:var(--text-muted);flex-shrink:0;">${filtered.length} item</span>
         </div>
       </div>
 
-      <!-- Table -->
-      <div class="card" style="padding:0;overflow:hidden;margin-top:4px;">
-        <div class="table-wrapper">
-          <table class="table" id="stock-table">
-            <thead>
-              <tr>
-                <th>Kode Barang</th>
-                <th>Nama Barang</th>
-                <th>Nama Gudang</th>
-                <th style="text-align:center;">Kuantitas</th>
-                <th>Def. Hrg. Jual</th>
-                <th style="text-align:center;">Diskon (%)</th>
-                <th>Kategori</th>
-                <th>Pemasok</th>
-                <th>Sumber</th>
-                <th style="width:60px;"></th>
-              </tr>
-            </thead>
-            <tbody>${filtered.length > 0 ? rows : emptyRow}</tbody>
-          </table>
-        </div>
-        <!-- Footer: info + pagination -->
-        <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 16px;border-top:1px solid var(--border-subtle);flex-wrap:wrap;gap:8px;">
-          <span style="font-size:12px;color:var(--text-muted);">
-            Menampilkan <strong>${from}–${to}</strong> dari <strong>${filtered.length}</strong> hasil (${stock.length} total item)
-          </span>
-          <div style="display:flex;gap:4px;align-items:center;">${paginationBtns}</div>
-        </div>
+      <!-- Hasil (hanya bagian ini yang di-update saat filter berubah) -->
+      <div id="stock-results-area" style="margin-top:8px;">
+        ${this._renderStockResults()}
       </div>
     </div>`;
-  },
-
-  _stockFilter: { search: '', kategori: 'all', gudang: 'all', sumber: 'all', page: 0 },
-
-  filterStock(key, value) {
-    if (!this._stockFilter) this._stockFilter = { search: '', kategori: 'all', gudang: 'all', sumber: 'all', page: 0 };
-    this._stockFilter[key] = key === 'page' ? Number(value) : value;
-    // Reset halaman saat filter berubah (kecuali page itu sendiri)
-    if (key !== 'page') this._stockFilter.page = 0;
-    const content = document.getElementById('page-content');
-    if (content) content.innerHTML = this.renderAppsheet();
-    if (key === 'search') {
-      const el = document.getElementById('stock-search');
-      if (el) { el.focus(); el.setSelectionRange(el.value.length, el.value.length); }
-    }
   },
 
   openStockForm(id) {

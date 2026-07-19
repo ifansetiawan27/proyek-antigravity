@@ -1717,3 +1717,184 @@ body.mobile-preview .topbar-right > div {
 #logoGrad stop:last-child, #logoGrad2 stop:last-child {
   stop-color: #6366f1 !important;
 }
+
+/* ============================================================
+   APPSHEET v.7 — LAYOUT & MOBILE
+   ============================================================ */
+
+/* Header baris atas */
+.appsheet-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.appsheet-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.appsheet-import-group {
+  display: flex;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+/* Legenda sumber data */
+.appsheet-legend {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 16px;
+  padding: 10px 14px;
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+}
+.appsheet-legend-hint {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+/* Toolbar filter (search + selects) */
+.appsheet-toolbar {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+  padding: 10px 14px !important;
+  margin-bottom: 0 !important;
+}
+.appsheet-selects {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.appsheet-select {
+  width: auto;
+  min-width: 120px;
+  padding: 7px 10px;
+  font-size: 12px;
+}
+
+/* Footer tabel */
+.stock-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+  border-top: 1px solid var(--border-subtle);
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* Toggle view: sembunyikan tabel saat mode kartu aktif */
+.stock-hidden-on-card  { display: none !important; }
+.stock-hidden-on-table { display: none !important; }
+
+/* Kartu mobile stock */
+.stock-view-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.stock-mobile-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 14px;
+}
+.stock-mobile-card--low {
+  border-color: rgba(220, 38, 38, 0.35);
+  background: rgba(220, 38, 38, 0.03);
+}
+.smc-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+.smc-kode {
+  font-size: 11px;
+  font-weight: 800;
+  color: var(--primary);
+  letter-spacing: 0.03em;
+}
+.smc-nama {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 10px;
+  line-height: 1.4;
+}
+.smc-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 5px 0;
+  border-bottom: 1px solid var(--border-subtle);
+  font-size: 12px;
+}
+.smc-row:last-child { border-bottom: none; }
+.smc-lbl { color: var(--text-muted); font-size: 11px; }
+.smc-val { font-weight: 600; text-align: right; }
+.smc-harga { color: var(--primary); }
+.smc-kritis { color: #dc2626; }
+
+/* Label tombol sembunyikan di layar sangat kecil */
+@media (max-width: 380px) {
+  .stock-view-label { display: none; }
+  .appsheet-btn-label { display: none; }
+}
+
+/* ── Responsive @media 768px ── */
+@media (max-width: 768px) {
+  .appsheet-header { flex-direction: column; gap: 10px; }
+  .appsheet-actions { width: 100%; justify-content: flex-start; }
+  .appsheet-import-group { flex: 1; }
+  .stock-import-btn { flex: 1; justify-content: center; padding: 8px 6px; font-size: 11px; }
+
+  .appsheet-legend { display: none; } /* legend disembunyikan di mobile, hemat ruang */
+  .appsheet-legend-hint { display: none; }
+
+  .appsheet-toolbar { flex-direction: column; gap: 8px; }
+  .appsheet-toolbar .search-input-wrap { min-width: 0; width: 100%; }
+  .appsheet-selects { width: 100%; display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+  .appsheet-select { min-width: 0; width: 100%; }
+
+  /* Pada mobile nyata, tampilan kartu lebih nyaman */
+  .stock-view-table { display: none !important; }
+  .stock-hidden-on-table { display: flex !important; }
+}
+
+@media (max-width: 480px) {
+  .appsheet-selects { grid-template-columns: 1fr; }
+  .stats-grid { grid-template-columns: 1fr 1fr; }
+}
+
+/* ── Mobile Preview (tombol "Mobile" di topbar) ── */
+body.mobile-preview .appsheet-header { flex-direction: column; gap: 10px; }
+body.mobile-preview .appsheet-actions { width: 100%; justify-content: flex-start; flex-wrap: wrap; }
+body.mobile-preview .appsheet-import-group { flex: 1; }
+body.mobile-preview .stock-import-btn { flex: 1; justify-content: center; padding: 8px 4px; font-size: 11px; }
+body.mobile-preview .appsheet-legend { display: none; }
+body.mobile-preview .appsheet-toolbar { flex-direction: column; gap: 8px; }
+body.mobile-preview .appsheet-toolbar .search-input-wrap { width: 100%; min-width: 0; }
+body.mobile-preview .appsheet-selects { width: 100%; display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+body.mobile-preview .appsheet-select { min-width: 0; width: 100%; font-size: 12px; }
+body.mobile-preview .stock-view-table { display: none !important; }
+body.mobile-preview .stock-hidden-on-table { display: flex !important; }
+body.mobile-preview .stock-view-cards { gap: 8px; }
+body.mobile-preview .stock-mobile-card { padding: 12px; }
+body.mobile-preview .smc-nama { font-size: 12px; }
+body.mobile-preview .stats-grid { grid-template-columns: 1fr 1fr !important; gap: 8px; }
+body.mobile-preview .stat-card { padding: 12px; }
+body.mobile-preview .stat-value { font-size: 20px; }
+body.mobile-preview .appsheet-btn-label { display: none; }
