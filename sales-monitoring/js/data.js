@@ -537,20 +537,36 @@ const DB = {
     return true;
   },
 
-  // ---- Seed Data ----
-  // Data uji coba dinonaktifkan untuk produksi.
-  // Data dikelola sepenuhnya melalui Supabase (setup-database.sql).
-  SEED_VERSION: 'v4-production',
+  // ---- Akun Default (selalu tersedia, tidak bergantung Supabase) ----
+  SEED_VERSION: 'v5',
   seed() {
-    // Bersihkan localStorage dari data seed lama jika ada
-    const oldVersion = localStorage.getItem('sm_seeded');
-    if (oldVersion && oldVersion !== this.SEED_VERSION) {
+    // Reset localStorage lama jika versi berubah
+    if (localStorage.getItem('sm_seeded') !== this.SEED_VERSION) {
       Object.values(this.KEYS).forEach(k => localStorage.removeItem(k));
-      ['sm_stock_seeded'].forEach(k => localStorage.removeItem(k));
+      localStorage.removeItem('sm_stock_seeded');
     }
+    if (localStorage.getItem('sm_seeded') === this.SEED_VERSION) return;
+
+    // ── AKUN DEFAULT ─────────────────────────────────────────
+    // Kredensial ini selalu ada bahkan tanpa koneksi Supabase.
+    // Update juga di: setup-database.sql (Bagian 4)
+    const users = [
+      { id: 'u_mgr1', name: 'Johan',         username: 'admin',   password: 'Admin@2026',  role: 'manager', area: 'All',     target: 0,        avatar: 'Jo' },
+      { id: 'u_s1',   name: 'Ifan Setiawan', username: 'ifan',    password: 'Sales@2026',  role: 'sales',   area: 'Jakarta', target: 50000000, avatar: 'I'  },
+      { id: 'u_s2',   name: 'Cici',          username: 'cici',    password: 'Sales@2026',  role: 'sales',   area: 'Jakarta', target: 45000000, avatar: 'C'  },
+      { id: 'u_s3',   name: 'Iqbal',         username: 'iqbal',   password: 'Sales@2026',  role: 'sales',   area: 'Jakarta', target: 40000000, avatar: 'Q'  },
+      { id: 'u_s4',   name: 'Pirman',        username: 'pirman',  password: 'Sales@2026',  role: 'sales',   area: 'Jakarta', target: 42000000, avatar: 'P'  },
+      { id: 'u_s5',   name: 'Nita',          username: 'nita',    password: 'Sales@2026',  role: 'sales',   area: 'Jakarta', target: 38000000, avatar: 'N'  },
+      { id: 'u_s6',   name: 'Try',           username: 'try',     password: 'Sales@2026',  role: 'sales',   area: 'Medan',   target: 0,        avatar: 'T'  },
+      { id: 'u_s7',   name: 'Agus',          username: 'agus',    password: 'Sales@2026',  role: 'sales',   area: 'Jakarta', target: 0,        avatar: 'A'  },
+    ];
+
+    this.set(this.KEYS.users, users);
     localStorage.setItem('sm_seeded', this.SEED_VERSION);
-    // Tidak ada data demo — semua data datang dari Supabase
   },
+
+  // Stock seed dinonaktifkan — data stok dikelola via Supabase / import Excel
+  seedStock() { return; },
   // ---- Analytics ----
   getSalesTotalBySalesId(salesId, period = 'all') {
     return this.getTransactions()

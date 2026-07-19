@@ -142,15 +142,18 @@ GRANT SELECT, INSERT, UPDATE, DELETE ON public.stock        TO anon;
 -- BAGIAN 4: DATA USERS
 -- ================================================================
 
+-- Hapus akun lama dulu (jika ada)
+DELETE FROM public.users WHERE id IN ('u_mgr1','u_s1','u_s2','u_s3','u_s4','u_s5','u_s6','u_s7');
+
 INSERT INTO public.users (id, name, username, password, role, area, target, avatar) VALUES
-  ('u_mgr1', 'johan',         'manager1', 'manager123', 'manager', 'All',     0,         'Jo'),
-  ('u_s1',   'Ifan Setiawan', 'ifan',     'sales123',   'sales',   'Jakarta', 50000000,  'I'),
-  ('u_s2',   'Cici',          'cici',     'sales123',   'sales',   'Jakarta', 45000000,  'C'),
-  ('u_s3',   'Iqbal',         'iqbal',    'sales123',   'sales',   'Jakarta', 40000000,  'Q'),
-  ('u_s4',   'Pirman',        'pirman',   'sales123',   'sales',   'Jakarta', 42000000,  'P'),
-  ('u_s5',   'Nita',          'nita',     'sales123',   'sales',   'Jakarta', 38000000,  'N'),
-  ('u_s6',   'Try',           'Try',      'sales123',   'sales',   'Medan',   0,         'T'),
-  ('u_s7',   'Agus',          'Agus',     'sales123',   'sales',   'Jakarta', 0,         'A')
+  ('u_mgr1', 'Johan',         'admin',   'Admin@2026',  'manager', 'All',     0,        'Jo'),
+  ('u_s1',   'Ifan Setiawan', 'ifan',    'Sales@2026',  'sales',   'Jakarta', 50000000, 'I'),
+  ('u_s2',   'Cici',          'cici',    'Sales@2026',  'sales',   'Jakarta', 45000000, 'C'),
+  ('u_s3',   'Iqbal',         'iqbal',   'Sales@2026',  'sales',   'Jakarta', 40000000, 'Q'),
+  ('u_s4',   'Pirman',        'pirman',  'Sales@2026',  'sales',   'Jakarta', 42000000, 'P'),
+  ('u_s5',   'Nita',          'nita',    'Sales@2026',  'sales',   'Jakarta', 38000000, 'N'),
+  ('u_s6',   'Try',           'try',     'Sales@2026',  'sales',   'Medan',   0,        'T'),
+  ('u_s7',   'Agus',          'agus',    'Sales@2026',  'sales',   'Jakarta', 0,        'A')
 ON CONFLICT (id) DO NOTHING;
 
 
@@ -166,12 +169,12 @@ ON CONFLICT (id) DO NOTHING;
 --   ✓ stock        → kosong
 --
 -- Login Manager:
---   username : manager1
---   password : manager123
+--   username : admin
+--   password : Admin@2026
 --
--- Login Sales (contoh):
---   username : ifan
---   password : sales123
+-- Login Sales (semua sama):
+--   username : ifan / cici / iqbal / pirman / nita / try / agus
+--   password : Sales@2026
 --
 -- Setelah login, gunakan Panel Manager untuk:
 --   - Tambah/edit produk

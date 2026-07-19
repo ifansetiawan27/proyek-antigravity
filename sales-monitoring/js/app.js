@@ -7,9 +7,8 @@ const App = {
 
   async init() {
     DB.initRemote();
-    // DB.seed() dan DB.seedStock() dinonaktifkan untuk produksi.
-    // Data dikelola via Supabase (lihat setup-database.sql).
-    DB.seed(); // hanya membersihkan localStorage lama, tidak insert data
+    DB.seed();      // load akun default ke localStorage (selalu berjalan)
+    DB.seedStock(); // no-op (stock dikelola via Supabase/Excel)
     if (DB.remoteClient) {
       DB.fetchRemoteData().catch(err => console.warn('Supabase load failed', err));
       // Cek tabel setelah 2 detik (beri waktu koneksi stabil)

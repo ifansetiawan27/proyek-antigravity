@@ -148,7 +148,7 @@ const Auth = {
     // Validasi
     if (!name)                          return showErr('Mohon isi nama lengkap');
     if (!email)                         return showErr('Mohon isi email');
-    if (!email.endsWith('@sales.com'))  return showErr('Email harus menggunakan domain @sales.com');
+    if (!email.endsWith('@klikdentalid.com'))  return showErr('Email harus menggunakan domain @klikdentalid.com');
     if (!password)                      return showErr('Mohon isi password');
     if (password.length < 6)           return showErr('Password minimal 6 karakter');
     if (password !== confirmPassword)  return showErr('Konfirmasi password tidak cocok');
