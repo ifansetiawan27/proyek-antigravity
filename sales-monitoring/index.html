@@ -78,76 +78,7 @@
         </button>
       </form>
 
-      <!-- ===== SIGNUP FORM ===== -->
-      <div id="signup-wrapper" class="hidden">
-        <form id="signup-form" class="login-form" onsubmit="return false;">
-          <div class="form-group">
-            <label class="form-label" for="signup-name">Nama Lengkap</label>
-            <div class="input-wrapper">
-              <svg class="input-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
-              </svg>
-              <input type="text" id="signup-name" class="form-input" placeholder="Nama lengkap Anda" autocomplete="name" />
-            </div>
-          </div>
-          <div class="form-group">
-            <label class="form-label" for="signup-email">Email</label>
-            <div class="input-wrapper">
-              <svg class="input-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/>
-              </svg>
-              <input type="email" id="signup-email" class="form-input" placeholder="nama@klikdentalid.com" autocomplete="email" />
-            </div>
-            <p style="font-size:11px;color:var(--text-muted);margin-top:4px;">Hanya email dengan domain <strong>@klikdentalid.com</strong> yang diizinkan</p>
-          </div>
-          <div class="form-group">
-            <label class="form-label" for="signup-password">Password</label>
-            <div class="input-wrapper">
-              <svg class="input-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
-              </svg>
-              <input type="password" id="signup-password" class="form-input" placeholder="Minimal 6 karakter" autocomplete="new-password" />
-            </div>
-          </div>
-          <div class="form-group">
-            <label class="form-label" for="signup-confirm">Konfirmasi Password</label>
-            <div class="input-wrapper">
-              <svg class="input-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
-              </svg>
-              <input type="password" id="signup-confirm" class="form-input" placeholder="Ulangi password" autocomplete="new-password" />
-            </div>
-          </div>
-          <div id="signup-error" class="login-error hidden">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/>
-            </svg>
-            Terjadi kesalahan
-          </div>
-          <div id="signup-success" class="hidden" style="background:rgba(16,185,129,0.08);border:1px solid rgba(16,185,129,0.25);border-radius:10px;padding:12px 14px;font-size:13px;color:#10b981;display:none;align-items:center;gap:8px;">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
-            Akun berhasil dibuat! Cek email untuk konfirmasi, lalu login.
-          </div>
-          <button type="submit" id="signup-btn" class="btn btn-primary btn-full" onclick="Auth.signup()">
-            <span>Daftar</span>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M5 12h14M12 5l7 7-7 7"/>
-            </svg>
-          </button>
-        </form>
-      </div>
 
-      <!-- Toggle login ↔ signup -->
-      <div style="text-align:center;margin-top:20px;font-size:13px;color:var(--text-muted);">
-        <span id="link-to-signup">
-          Belum punya akun?
-          <a href="#" onclick="Auth.toggleForm('signup');return false;" style="color:var(--primary-light);font-weight:600;text-decoration:none;">Daftar</a>
-        </span>
-        <span id="link-to-login" class="hidden">
-          Sudah punya akun?
-          <a href="#" onclick="Auth.toggleForm('login');return false;" style="color:var(--primary-light);font-weight:600;text-decoration:none;">Masuk</a>
-        </span>
-      </div>
 
     </div>
   </div>
