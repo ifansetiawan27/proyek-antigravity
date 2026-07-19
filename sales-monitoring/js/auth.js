@@ -10,19 +10,24 @@ const Auth = {
     const password = document.getElementById('login-password').value.trim();
     const errEl    = document.getElementById('login-error');
 
+    const showLoginErr = () => {
+      errEl.classList.remove('hidden');
+      errEl.lastChild.textContent = ' Username atau password salah';
+      this._shakeCard();
+    };
+
     if (!rawInput || !password) {
       errEl.classList.remove('hidden');
       errEl.lastChild.textContent = ' Mohon isi username dan password';
       return;
     }
 
-    // Dukung input email (ifan@sales.com) maupun username (ifan)
+    // Dukung input email (ifan@sales.com) atau username (ifan)
     const username = rawInput.includes('@') ? rawInput.split('@')[0] : rawInput;
 
     // Retry Supabase init jika belum terhubung
     if (!DB.remoteClient) DB.initRemote();
 
-    // Tampilkan loading state pada tombol
     const btn = document.getElementById('login-btn');
     const origHtml = btn ? btn.innerHTML : '';
     if (btn) {
@@ -31,40 +36,46 @@ const Auth = {
     }
 
     try {
-      // 1. Cek cache localStorage dulu
-      let user = DB.getUserByUsername(username);
+      let user = null;
 
-      // 2. Jika tidak ada di cache, ambil dari Supabase
-      if (!user && DB.remoteClient) {
-        user = await DB.fetchUserByUsername(username);
-        if (user) {
-          // Verifikasi password lalu cache tanpa password
-          if (user.password !== password) {
-            errEl.classList.remove('hidden');
-            errEl.lastChild.textContent = ' Username atau password salah';
-            this._shakeCard();
-            return;
-          }
-          const { password: _pw, ...safeUser } = user;
-          const users = DB.getUsers();
-          users.push(safeUser);
-          DB.set(DB.KEYS.users, users);
-          user = safeUser;
+      // ── Langkah 1: Cari di localStorage (bisa ada dari fetchRemoteData) ──
+      const cached = DB.getUserByUsername(username);
+      if (cached) {
+        // User ditemukan di cache — verifikasi password
+        if (cached.password && cached.password === password) {
+          user = cached;
+        } else if (cached.password && cached.password !== password) {
+          // Password di cache ada tapi salah → tidak perlu ke Supabase
+          return showLoginErr();
         }
+        // Jika cached.password tidak ada, lanjut ke Supabase (mungkin cached tanpa password)
       }
 
-      // 3. Cek hasil akhir
-      if (!user || user.password !== password) {
-        errEl.classList.remove('hidden');
-        errEl.lastChild.textContent = ' Username atau password salah';
-        this._shakeCard();
-        return;
+      // ── Langkah 2: Ambil langsung dari Supabase jika belum dapat user ──
+      if (!user && DB.remoteClient) {
+        const remote = await DB.fetchUserByUsername(username);
+        if (!remote) return showLoginErr();               // username tidak ada
+        if (remote.password !== password) return showLoginErr(); // password salah
+
+        // Simpan ke localStorage WITH password agar login berikutnya pakai cache
+        const list = DB.getUsers();
+        const idx  = list.findIndex(u => u.username === remote.username);
+        if (idx !== -1) list[idx] = remote; else list.push(remote);
+        DB.set(DB.KEYS.users, list);
+        user = remote;
       }
 
+      // ── Langkah 3: Gagal total ──
+      if (!user) return showLoginErr();
+
+      // ── Sukses ──
       errEl.classList.add('hidden');
       sessionStorage.setItem(this.SESSION_KEY, JSON.stringify({ id: user.id, role: user.role }));
       this.onLoginSuccess(user);
 
+    } catch (e) {
+      console.error('Login error:', e);
+      showLoginErr();
     } finally {
       if (btn) { btn.disabled = false; btn.innerHTML = origHtml; }
     }
