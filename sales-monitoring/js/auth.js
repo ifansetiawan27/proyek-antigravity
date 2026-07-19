@@ -116,7 +116,15 @@ const Auth = {
     if (password.length < 6)           return showErr('Password minimal 6 karakter');
     if (password !== confirmPassword)  return showErr('Konfirmasi password tidak cocok');
 
-    if (!DB.remoteClient) return showErr('Tidak ada koneksi ke Supabase. Periksa config.js');
+    // Coba init ulang jika remoteClient belum ada
+    if (!DB.remoteClient) DB.initRemote();
+    if (!DB.remoteClient) {
+      const sdkOk = typeof supabase !== 'undefined';
+      const cfgOk = typeof APP_CONFIG !== 'undefined' && APP_CONFIG.SUPABASE_URL;
+      if (!sdkOk) return showErr('Supabase SDK gagal dimuat. Cek koneksi internet lalu refresh halaman.');
+      if (!cfgOk) return showErr('File config.js tidak ditemukan. Pastikan aplikasi dijalankan via server (bukan file://).');
+      return showErr('Gagal terhubung ke Supabase. Periksa SUPABASE_URL dan SUPABASE_KEY di config.js');
+    }
 
     // Username = prefix email (misal: ifan dari ifan@sales.com)
     const username = email.split('@')[0];

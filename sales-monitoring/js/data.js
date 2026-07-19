@@ -11,16 +11,29 @@ const DB = {
   remoteClient: null,
 
   initRemote() {
-    if (typeof supabase === 'undefined' || typeof supabase.createClient !== 'function') {
-      console.warn('Supabase SDK belum dimuat');
+    // Re-baca APP_CONFIG saat dipanggil (defensive, jaga-jaga timing load)
+    if (typeof APP_CONFIG !== 'undefined') {
+      if (APP_CONFIG.SUPABASE_URL) this.SUPABASE_URL = APP_CONFIG.SUPABASE_URL;
+      if (APP_CONFIG.SUPABASE_KEY) this.SUPABASE_KEY = APP_CONFIG.SUPABASE_KEY;
+    }
+
+    // Coba global 'supabase' dan fallback ke window.supabase
+    const sdkClient = (typeof supabase !== 'undefined' && supabase.createClient)
+      ? supabase
+      : (typeof window !== 'undefined' && window.supabase && window.supabase.createClient)
+        ? window.supabase
+        : null;
+
+    if (!sdkClient) {
+      console.warn('Supabase SDK belum dimuat (CDN mungkin gagal)');
       return;
     }
     if (!this.SUPABASE_URL || !this.SUPABASE_KEY) {
-      console.warn('SUPABASE_URL atau SUPABASE_KEY kosong di config.js');
+      console.warn('SUPABASE_URL atau SUPABASE_KEY kosong — periksa js/config.js');
       return;
     }
     try {
-      this.remoteClient = supabase.createClient(this.SUPABASE_URL, this.SUPABASE_KEY);
+      this.remoteClient = sdkClient.createClient(this.SUPABASE_URL, this.SUPABASE_KEY);
       console.log('Supabase client berhasil diinisialisasi');
     } catch (e) {
       console.error('Gagal membuat Supabase client:', e.message);
