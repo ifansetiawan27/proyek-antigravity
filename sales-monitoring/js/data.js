@@ -552,7 +552,7 @@ const DB = {
     // Update juga di: setup-database.sql (Bagian 4)
     const users = [
       { id: 'u_mgr1', name: 'Johan',         username: 'admin',   password: 'Admin@2026',  role: 'manager', area: 'All',     target: 0,        avatar: 'Jo' },
-      { id: 'u_s1',   name: 'Ifan Setiawan', username: 'ifan',    password: 'Sales@2026',  role: 'sales',   area: 'Jakarta', target: 50000000, avatar: 'I'  },
+      { id: 'u_s1',   name: 'Ifan ',         username: 'ifan',    password: 'Sales@2026',  role: 'sales',   area: 'Jakarta', target: 50000000, avatar: 'I'  },
       { id: 'u_s2',   name: 'Cici',          username: 'cici',    password: 'Sales@2026',  role: 'sales',   area: 'Jakarta', target: 45000000, avatar: 'C'  },
       { id: 'u_s3',   name: 'Iqbal',         username: 'iqbal',   password: 'Sales@2026',  role: 'sales',   area: 'Jakarta', target: 40000000, avatar: 'Q'  },
       { id: 'u_s4',   name: 'Pirman',        username: 'pirman',  password: 'Sales@2026',  role: 'sales',   area: 'Jakarta', target: 42000000, avatar: 'P'  },
@@ -586,23 +586,62 @@ const DB = {
   getBestProducts(period = 'monthly') {
     const txs = this.getTransactions().filter(t => period === 'all' || this.isInPeriod(t.date, period));
     const map = {};
+
     txs.forEach(tx => {
+      if (!Array.isArray(tx.items)) return;
+
       tx.items.forEach(item => {
-        if (!map[item.productId]) {
+        const rawName    = (item.productName || '').trim();
+        if (!rawName) return;
+
+        const itemRevenue = (item.price || 0) * (1 - (item.discount || 0) / 100) * (item.qty || 1);
+        const itemQty     = item.qty || 1;
+
+        // Produk dari katalog (productId valid & bukan 'p16' generik)
+        const isGeneric = !item.productId
+          || item.productId === 'p16'
+          || item.productId.startsWith('manual');
+
+        if (!isGeneric) {
+          // ── Produk katalog: gunakan productId sebagai key ──
           const prod = this.getProductById(item.productId);
-          map[item.productId] = {
-            id: item.productId,
-            name: item.productName || (prod ? prod.name : item.productId),
-            category: prod ? prod.category : '-',
-            qty: 0,
-            revenue: 0,
-          };
+          const key  = item.productId;
+          if (!map[key]) {
+            map[key] = {
+              id: key,
+              name: item.productName || (prod ? prod.name : key),
+              category: prod ? prod.category : '-',
+              qty: 0, revenue: 0,
+            };
+          }
+          map[key].qty     += itemQty;
+          map[key].revenue += itemRevenue;
+
+        } else {
+          // ── Input manual: pisahkan per koma → ranking individual ──
+          const names = rawName.split(',').map(n => n.trim()).filter(Boolean);
+          const share = 1 / names.length; // distribusi proporsional
+
+          names.forEach(name => {
+            const key = name.toLowerCase();
+            if (!map[key]) {
+              map[key] = {
+                id: key,
+                name,
+                category: '-',
+                qty: 0, revenue: 0,
+              };
+            }
+            map[key].qty     += itemQty * share;
+            map[key].revenue += itemRevenue * share;
+          });
         }
-        map[item.productId].qty += item.qty;
-        const discountedPrice = item.price * (1 - (item.discount || 0) / 100);
-        map[item.productId].revenue += discountedPrice * item.qty;
       });
     });
-    return Object.values(map).sort((a, b) => b.revenue - a.revenue).slice(0, 20);
+
+    return Object.values(map)
+      .filter(p => p.revenue > 0 || p.qty > 0)
+      .sort((a, b) => b.revenue - a.revenue)
+      .slice(0, 20);
   },
 };

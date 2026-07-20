@@ -124,8 +124,8 @@ const Products = {
             </div>
           </div>
           <div class="product-rank-val">
-            <div class="product-rank-val-main">${this._sortBy === 'revenue' ? DB.formatRupiah(prod.revenue) : prod.qty + ' unit'}</div>
-            <div class="product-rank-val-sub">${this._sortBy === 'revenue' ? prod.qty + ' unit terjual' : DB.formatRupiah(prod.revenue)}</div>
+            <div class="product-rank-val-main">${this._sortBy === 'revenue' ? DB.formatRupiah(prod.revenue) : Math.round(prod.qty) + ' transaksi'}</div>
+            <div class="product-rank-val-sub">${this._sortBy === 'revenue' ? Math.round(prod.qty) + ' transaksi' : DB.formatRupiah(prod.revenue)}</div>
           </div>
         </div>`;
       }).join('')}
