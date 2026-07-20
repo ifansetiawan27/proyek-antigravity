@@ -51,9 +51,12 @@ const Products = {
 
   renderStats(products) {
     const totalRevenue = products.reduce((s, p) => s + p.revenue, 0);
-    const totalQty = products.reduce((s, p) => s + p.qty, 0);
-    const top1 = products[0];
-    const categories = [...new Set(products.map(p => p.category))].length;
+    // Gunakan Math.round untuk hindari floating point imprecision (misal 11.0000000000001)
+    const totalQty = Math.round(products.reduce((s, p) => s + p.qty, 0));
+    // Produk terlaris = paling banyak dipesan (qty tertinggi)
+    const top1 = [...products].sort((a, b) => b.qty - a.qty)[0];
+    const categories = [...new Set(products.map(p => p.category).filter(c => c && c !== '-' && c !== 'Dari Transaksi'))];
+    const catCount = categories.length || products.length > 0 ? products.length : 0;
 
     return `
     <div class="stat-card primary">
@@ -68,21 +71,21 @@ const Products = {
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>
       </div>
       <div class="stat-value">${totalQty}</div>
-      <div class="stat-label">Total Volume Terjual</div>
+      <div class="stat-label">Total Pesanan</div>
     </div>
     <div class="stat-card warning">
       <div class="stat-icon warning">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
       </div>
       <div class="stat-value" style="font-size:14px;">${top1 ? top1.name : '–'}</div>
-      <div class="stat-label">Produk Terlaris #1</div>
+      <div class="stat-label">Paling Banyak Dipesan</div>
     </div>
     <div class="stat-card info">
       <div class="stat-icon info">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
       </div>
-      <div class="stat-value">${categories}</div>
-      <div class="stat-label">Kategori Produk</div>
+      <div class="stat-value">${products.length}</div>
+      <div class="stat-label">Produk Unik</div>
     </div>`;
   },
 
@@ -175,6 +178,7 @@ const Products = {
     if (list) list.innerHTML = this.renderList(products);
     // Update active tabs
     document.querySelectorAll('#sort-tabs .filter-tab').forEach(t => t.classList.remove('active'));
-    document.querySelector(`#sort-tabs .filter-tab:${sortBy === 'revenue' ? 'first-child' : 'last-child'}`)?.classList.add('active');
+    // Urutan tombol: first = "Paling Laku" (qty), last = "Omset Tertinggi" (revenue)
+    document.querySelector(`#sort-tabs .filter-tab:${sortBy === 'qty' ? 'first-child' : 'last-child'}`)?.classList.add('active');
   },
 };
