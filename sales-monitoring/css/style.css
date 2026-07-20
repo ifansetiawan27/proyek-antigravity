@@ -618,7 +618,7 @@ input, select, textarea { font-family: inherit; }
   position: fixed;
   inset: 0;
   background: rgba(0, 0, 0, 0.45);
-  z-index: 149;               /* tepat di bawah sidebar (z-index: 150) */
+  z-index: 99;                /* di bawah sidebar (z-index: 100) agar nav bisa diklik */
   opacity: 0;
   transition: opacity 0.28s ease;
 }
