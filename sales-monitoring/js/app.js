@@ -153,6 +153,15 @@ const App = {
 
     this.currentPage = page;
 
+    // Tutup sidebar + overlay di mobile saat navigasi
+    if (window.innerWidth <= 768) {
+      const _sb  = document.getElementById('sidebar');
+      const _ov  = document.getElementById('sidebar-overlay');
+      if (_sb) _sb.classList.remove('mobile-open');
+      if (_ov) _ov.classList.remove('active');
+      document.body.style.overflow = '';
+    }
+
     // Update nav active state
     document.querySelectorAll('.nav-item').forEach(el => {
       el.classList.toggle('active', el.dataset.page === page);
@@ -1009,12 +1018,16 @@ const App = {
   },
 
   toggleSidebar() {
-    const sidebar = document.getElementById('sidebar');
-    const main = document.getElementById('main-content');
+    const sidebar  = document.getElementById('sidebar');
+    const main     = document.getElementById('main-content');
+    const overlay  = document.getElementById('sidebar-overlay');
     const isMobile = window.innerWidth <= 768;
 
     if (isMobile) {
-      sidebar.classList.toggle('mobile-open');
+      const isOpen = sidebar.classList.toggle('mobile-open');
+      if (overlay) overlay.classList.toggle('active', isOpen);
+      // Cegah scroll body saat sidebar terbuka
+      document.body.style.overflow = isOpen ? 'hidden' : '';
     } else {
       sidebar.classList.toggle('collapsed');
       main.classList.toggle('sidebar-collapsed');
@@ -1087,13 +1100,22 @@ spinnerStyle.textContent = `
 `;
 document.head.appendChild(spinnerStyle);
 
+// Helper: tutup sidebar + overlay + kembalikan scroll
+function _closeMobileSidebar() {
+  const sidebar = document.getElementById('sidebar');
+  const overlay = document.getElementById('sidebar-overlay');
+  if (sidebar) sidebar.classList.remove('mobile-open');
+  if (overlay) overlay.classList.remove('active');
+  document.body.style.overflow = '';
+}
+
 // Mobile sidebar close on click outside
 document.addEventListener('click', (e) => {
   const sidebar = document.getElementById('sidebar');
   const menuBtn = document.querySelector('.mobile-menu-btn');
   if (sidebar && window.innerWidth <= 768 && sidebar.classList.contains('mobile-open')) {
     if (!sidebar.contains(e.target) && e.target !== menuBtn && !menuBtn?.contains(e.target)) {
-      sidebar.classList.remove('mobile-open');
+      _closeMobileSidebar();
     }
   }
 });

@@ -609,6 +609,43 @@ input, select, textarea { font-family: inherit; }
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
+  cursor: pointer;
+}
+
+/* ── Overlay gelap di belakang sidebar (mobile) ── */
+.sidebar-overlay {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  z-index: 149;               /* tepat di bawah sidebar (z-index: 150) */
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+  opacity: 0;
+  transition: opacity 0.28s ease;
+}
+.sidebar-overlay.active {
+  display: block;
+  opacity: 1;
+}
+
+/* ── Tombol × di dalam sidebar (hanya mobile) ── */
+.sidebar-close-mobile {
+  display: none;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  color: rgba(255, 255, 255, 0.7);
+  border-radius: var(--radius-sm);
+  width: 32px; height: 32px;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background 0.2s, color 0.2s;
+}
+.sidebar-close-mobile:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: white;
 }
 .page-title {
   font-size: 18px;
@@ -1462,6 +1499,12 @@ body.mobile-preview .page-content {
 body.mobile-preview .mobile-menu-btn {
   display: inline-flex;
 }
+body.mobile-preview .sidebar-close-mobile {
+  display: flex;
+}
+body.mobile-preview .sidebar-toggle {
+  display: none;
+}
 body.mobile-preview .topbar-right {
   gap: 8px;
   flex-wrap: wrap;
@@ -1731,6 +1774,7 @@ body.mobile-preview .topbar-right > div {
   .main-content { margin-left: 0 !important; }
   .mobile-menu-btn { display: flex; }
   .sidebar-toggle { display: none; }
+  .sidebar-close-mobile { display: flex; }
   .page-content { padding: 16px; }
   .topbar { padding: 0 16px; }
   .topbar-search { display: none; }
