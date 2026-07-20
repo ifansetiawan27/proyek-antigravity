@@ -4,7 +4,7 @@
 
 const Products = {
   _period: 'monthly',
-  _sortBy: 'revenue',
+  _sortBy: 'qty',
 
   renderPage() {
     const products = DB.getBestProducts(this._period);
@@ -23,8 +23,8 @@ const Products = {
             <button class="filter-tab ${this._period==='monthly'?'active':''}" onclick="Products.setPeriod('monthly')">Bulanan</button>
           </div>
           <div class="filter-tabs" id="sort-tabs">
-            <button class="filter-tab ${this._sortBy==='revenue'?'active':''}" onclick="Products.setSort('revenue')">Omset</button>
-            <button class="filter-tab ${this._sortBy==='qty'?'active':''}" onclick="Products.setSort('qty')">Volume</button>
+            <button class="filter-tab ${this._sortBy==='qty'?'active':''}" onclick="Products.setSort('qty')">Paling Laku</button>
+            <button class="filter-tab ${this._sortBy==='revenue'?'active':''}" onclick="Products.setSort('revenue')">Omset Tertinggi</button>
           </div>
         </div>
       </div>
@@ -39,7 +39,7 @@ const Products = {
         <div class="card-header">
           <div>
             <div class="card-title">Ranking Produk</div>
-            <div class="card-subtitle">Diurutkan berdasarkan ${this._sortBy === 'revenue' ? 'omset (Rupiah)' : 'volume penjualan (Qty)'} • ${this._period === 'daily' ? 'Hari Ini' : this._period === 'weekly' ? '7 Hari Terakhir' : 'Bulan Ini'} • Top ${Math.min(products.length, 20)}</div>
+            <div class="card-subtitle">Diurutkan berdasarkan ${this._sortBy === 'qty' ? 'jumlah pesanan (paling laku)' : 'omset tertinggi (Rupiah)'} • ${this._period === 'daily' ? 'Hari Ini' : this._period === 'weekly' ? '7 Hari Terakhir' : 'Bulan Ini'} • Top ${Math.min(products.length, 20)}</div>
           </div>
         </div>
         <div id="product-list">
@@ -138,7 +138,7 @@ const Products = {
             ${catLabel ? `<span style="font-size:10px;padding:1px 7px;border-radius:20px;background:var(--bg-input);color:var(--text-muted);border:1px solid var(--border-subtle);">${catLabel}</span>` : ''}
           </div>
           <div style="display:flex;align-items:center;gap:6px;margin-top:2px;">
-            <span style="font-size:11px;color:var(--text-muted);">${txCount} transaksi</span>
+            <span style="font-size:11px;color:var(--text-muted);">${txCount}× dipesan</span>
             <span style="font-size:11px;color:var(--text-muted);">·</span>
             <span style="font-size:11px;color:var(--primary-light);font-weight:600;">${pctRev}% omset</span>
           </div>
@@ -147,8 +147,8 @@ const Products = {
           </div>
         </div>
         <div class="product-rank-val">
-          <div class="product-rank-val-main">${this._sortBy === 'revenue' ? DB.formatRupiah(prod.revenue) : txCount + ' transaksi'}</div>
-          <div class="product-rank-val-sub">${this._sortBy === 'revenue' ? txCount + ' transaksi' : DB.formatRupiah(prod.revenue)}</div>
+          <div class="product-rank-val-main">${this._sortBy === 'revenue' ? DB.formatRupiah(prod.revenue) : txCount + '× dipesan'}</div>
+            <div class="product-rank-val-sub">${this._sortBy === 'revenue' ? txCount + '× dipesan' : DB.formatRupiah(prod.revenue)}</div>
         </div>
       </div>`;
     }).join('');
