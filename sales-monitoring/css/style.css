@@ -1773,6 +1773,14 @@ body.mobile-preview .topbar-right > div {
   .mobile-menu-btn { display: flex; }
   .sidebar-toggle { display: none; }
   .sidebar-close-mobile { display: flex; }
+
+  /* Paksa sidebar selalu expanded di mobile — abaikan class 'collapsed' */
+  .sidebar.collapsed { width: var(--sidebar-width) !important; }
+  .sidebar.collapsed .sidebar-brand,
+  .sidebar.collapsed .nav-item span,
+  .sidebar.collapsed .nav-section-label { display: block !important; opacity: 1 !important; width: auto !important; }
+  .sidebar.collapsed .nav-item { justify-content: flex-start !important; padding: 10px 16px !important; }
+  .sidebar.collapsed .sidebar-toggle svg { transform: none !important; }
   .page-content { padding: 16px; }
   .topbar { padding: 0 16px; }
   .topbar-search { display: none; }

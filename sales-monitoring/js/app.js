@@ -1021,9 +1021,11 @@ const App = {
     const isMobile = window.innerWidth <= 768;
 
     if (isMobile) {
+      // Selalu hapus 'collapsed' di mobile agar teks nav selalu tampil
+      sidebar.classList.remove('collapsed');
+      main.classList.remove('sidebar-collapsed');
       const isOpen = sidebar.classList.toggle('mobile-open');
       if (overlay) overlay.classList.toggle('active', isOpen);
-      // Cegah scroll body saat sidebar terbuka
       document.body.style.overflow = isOpen ? 'hidden' : '';
     } else {
       sidebar.classList.toggle('collapsed');
