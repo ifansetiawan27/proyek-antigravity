@@ -624,11 +624,18 @@ const DB = {
 
           names.forEach(name => {
             const key = name.toLowerCase();
+            // Capitalize huruf pertama setiap kata
+            const displayName = name.replace(/\b\w/g, c => c.toUpperCase());
             if (!map[key]) {
+              // Coba cocokkan ke katalog produk
+              const matched = this.getProducts().find(p =>
+                p.name.toLowerCase() === key ||
+                p.sku?.toLowerCase() === key
+              );
               map[key] = {
                 id: key,
-                name,
-                category: '-',
+                name: matched ? matched.name : displayName,
+                category: matched ? matched.category : 'Dari Transaksi',
                 qty: 0, revenue: 0,
               };
             }

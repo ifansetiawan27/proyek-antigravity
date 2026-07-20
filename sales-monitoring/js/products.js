@@ -39,7 +39,7 @@ const Products = {
         <div class="card-header">
           <div>
             <div class="card-title">Ranking Produk</div>
-            <div class="card-subtitle">Diurutkan berdasarkan ${this._sortBy === 'revenue' ? 'omset (Rupiah)' : 'volume penjualan (Qty)'} • ${this._period === 'daily' ? 'Hari Ini' : this._period === 'weekly' ? '7 Hari Terakhir' : 'Bulan Ini'}</div>
+            <div class="card-subtitle">Diurutkan berdasarkan ${this._sortBy === 'revenue' ? 'omset (Rupiah)' : 'volume penjualan (Qty)'} • ${this._period === 'daily' ? 'Hari Ini' : this._period === 'weekly' ? '7 Hari Terakhir' : 'Bulan Ini'} • Top ${Math.min(products.length, 20)}</div>
           </div>
         </div>
         <div id="product-list">
@@ -91,6 +91,7 @@ const Products = {
       return `<div class="empty-state">
         <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
         <p>Tidak ada data produk untuk periode ini</p>
+        <p style="font-size:12px;color:var(--text-muted);margin-top:4px;">Input transaksi terlebih dahulu agar produk muncul di sini</p>
       </div>`;
     }
 
@@ -102,34 +103,57 @@ const Products = {
       ? Math.max(...sorted.map(p => p.revenue))
       : Math.max(...sorted.map(p => p.qty));
 
-    const rankColors = ['#ffd700', '#c0c0c0', '#cd7f32'];
-    const rankClass = ['gold', 'silver', 'bronze'];
+    const totalRevenue = sorted.reduce((s, p) => s + p.revenue, 0);
+    const rankClass    = ['gold', 'silver', 'bronze'];
+    const barColors    = [
+      'linear-gradient(90deg,#f59e0b,#d97706)',
+      'linear-gradient(90deg,#94a3b8,#64748b)',
+      'linear-gradient(90deg,#cd7f32,#a05c20)',
+    ];
 
-    return `<div class="products-grid">
-      ${sorted.map((prod, i) => {
-        const val = this._sortBy === 'revenue' ? prod.revenue : prod.qty;
-        const pct = maxVal > 0 ? (val / maxVal) * 100 : 0;
-        const rank = i + 1;
-        const medalEmoji = rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : '';
-        const numClass = rank <= 3 ? rankClass[rank - 1] : '';
-
-        return `
-        <div class="product-rank-item">
-          <div class="rank-num ${numClass}">${medalEmoji || rank}</div>
-          <div class="product-rank-bar">
-            <div class="product-rank-name">${prod.name}</div>
-            <div class="product-rank-cat">${prod.category}</div>
-            <div class="product-rank-prog">
-              <div class="product-rank-prog-fill" style="width:${pct}%;background:${rank===1?'linear-gradient(90deg,#f59e0b,#d97706)':rank===2?'linear-gradient(90deg,#94a3b8,#64748b)':rank===3?'linear-gradient(90deg,#cd7f32,#a05c20)':'var(--grad-primary)'}"></div>
-            </div>
-          </div>
-          <div class="product-rank-val">
-            <div class="product-rank-val-main">${this._sortBy === 'revenue' ? DB.formatRupiah(prod.revenue) : Math.round(prod.qty) + ' transaksi'}</div>
-            <div class="product-rank-val-sub">${this._sortBy === 'revenue' ? Math.round(prod.qty) + ' transaksi' : DB.formatRupiah(prod.revenue)}</div>
-          </div>
-        </div>`;
-      }).join('')}
+    const infoBar = `
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;
+      padding:10px 14px;background:var(--bg-input);border-radius:var(--radius-md);margin-bottom:12px;font-size:12px;color:var(--text-muted);">
+      <span>Menampilkan <strong style="color:var(--text-primary);">${sorted.length}</strong> produk unik</span>
+      <span>Total omset: <strong style="color:var(--primary-light);">${DB.formatRupiah(totalRevenue)}</strong></span>
     </div>`;
+
+    const rows = sorted.map((prod, i) => {
+      const val     = this._sortBy === 'revenue' ? prod.revenue : prod.qty;
+      const pct     = maxVal > 0 ? Math.round((val / maxVal) * 100) : 0;
+      const pctRev  = totalRevenue > 0 ? ((prod.revenue / totalRevenue) * 100).toFixed(1) : 0;
+      const rank    = i + 1;
+      const medal   = rank === 1 ? '🥇' : rank === 2 ? '🥈' : rank === 3 ? '🥉' : null;
+      const cls     = rank <= 3 ? rankClass[rank - 1] : '';
+      const barClr  = rank <= 3 ? barColors[rank - 1] : 'var(--grad-primary)';
+      const txCount = Math.round(prod.qty);
+      const catLabel = prod.category && prod.category !== '-' ? prod.category : '';
+
+      return `
+      <div class="product-rank-item">
+        <div class="rank-num ${cls}">${medal || rank}</div>
+        <div class="product-rank-bar">
+          <div style="display:flex;align-items:baseline;gap:6px;flex-wrap:wrap;">
+            <div class="product-rank-name">${prod.name}</div>
+            ${catLabel ? `<span style="font-size:10px;padding:1px 7px;border-radius:20px;background:var(--bg-input);color:var(--text-muted);border:1px solid var(--border-subtle);">${catLabel}</span>` : ''}
+          </div>
+          <div style="display:flex;align-items:center;gap:6px;margin-top:2px;">
+            <span style="font-size:11px;color:var(--text-muted);">${txCount} transaksi</span>
+            <span style="font-size:11px;color:var(--text-muted);">·</span>
+            <span style="font-size:11px;color:var(--primary-light);font-weight:600;">${pctRev}% omset</span>
+          </div>
+          <div class="product-rank-prog" style="margin-top:6px;">
+            <div class="product-rank-prog-fill" style="width:${pct}%;background:${barClr};"></div>
+          </div>
+        </div>
+        <div class="product-rank-val">
+          <div class="product-rank-val-main">${this._sortBy === 'revenue' ? DB.formatRupiah(prod.revenue) : txCount + ' transaksi'}</div>
+          <div class="product-rank-val-sub">${this._sortBy === 'revenue' ? txCount + ' transaksi' : DB.formatRupiah(prod.revenue)}</div>
+        </div>
+      </div>`;
+    }).join('');
+
+    return `<div class="products-grid">${infoBar}${rows}</div>`;
   },
 
   setPeriod(period) {
