@@ -136,7 +136,7 @@ const Products = {
         <div style="background:linear-gradient(135deg,rgba(124,58,237,0.08),rgba(99,102,241,0.05));border:1px solid rgba(124,58,237,0.2);border-radius:12px;padding:10px 16px;text-align:right;">
           <div style="font-size:10px;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:4px;">🏆 Paling Banyak Dipesan</div>
           <div style="font-size:14px;font-weight:800;color:#7c3aed;">${top.name}</div>
-          <div style="font-size:12px;color:var(--text-muted);margin-top:2px;">${Math.round(top.qty)}× dipesan · ${DB.formatRupiah(top.revenue)}</div>
+          <div style="font-size:12px;color:var(--text-muted);margin-top:2px;">${Math.round(top.qty)}× dipesan</div>
         </div>
       </div>
 
@@ -238,10 +238,8 @@ const Products = {
     ];
 
     const infoBar = `
-    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;
-      padding:10px 14px;background:var(--bg-input);border-radius:var(--radius-md);margin-bottom:12px;font-size:12px;color:var(--text-muted);">
+    <div style="display:flex;align-items:center;padding:10px 14px;background:var(--bg-input);border-radius:var(--radius-md);margin-bottom:12px;font-size:12px;color:var(--text-muted);">
       <span>Menampilkan <strong style="color:var(--text-primary);">${sorted.length}</strong> produk unik</span>
-      <span>Total omset: <strong style="color:var(--primary-light);">${DB.formatRupiah(totalRevenue)}</strong></span>
     </div>`;
 
     const rows = sorted.map((prod, i) => {
@@ -265,16 +263,13 @@ const Products = {
           </div>
           <div style="display:flex;align-items:center;gap:6px;margin-top:2px;">
             <span style="font-size:11px;color:var(--text-muted);">${txCount}× dipesan</span>
-            <span style="font-size:11px;color:var(--text-muted);">·</span>
-            <span style="font-size:11px;color:var(--primary-light);font-weight:600;">${pctRev}% omset</span>
           </div>
           <div class="product-rank-prog" style="margin-top:6px;">
             <div class="product-rank-prog-fill" style="width:${pct}%;background:${barClr};"></div>
           </div>
         </div>
         <div class="product-rank-val">
-          <div class="product-rank-val-main">${this._sortBy === 'revenue' ? DB.formatRupiah(prod.revenue) : txCount + '× dipesan'}</div>
-            <div class="product-rank-val-sub">${this._sortBy === 'revenue' ? txCount + '× dipesan' : DB.formatRupiah(prod.revenue)}</div>
+          <div class="product-rank-val-main">${txCount}× dipesan</div>
         </div>
       </div>`;
     }).join('');
