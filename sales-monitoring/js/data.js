@@ -95,7 +95,8 @@ const DB = {
   async testConnection() {
     if (!this.remoteClient) return false;
     try {
-      const { data, error } = await this.remoteClient.from('users').select('id').limit(1);
+      // pakai tabel 'products' (boleh dibaca anon) — tabel 'users' dikunci setelah hardening
+      const { data, error } = await this.remoteClient.from('products').select('id').limit(1);
       if (error) {
         console.warn('Supabase test connection failed', error);
         return false;

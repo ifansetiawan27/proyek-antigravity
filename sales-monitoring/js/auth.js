@@ -37,36 +37,56 @@ const Auth = {
 
     try {
       let user = null;
+      let verifiedViaRpc = false;
 
-      // ── Langkah 1: Cari di localStorage (bisa ada dari fetchRemoteData) ──
-      const cached = DB.getUserByUsername(username);
-      if (cached) {
-        // User ditemukan di cache — verifikasi password
-        if (cached.password && cached.password === password) {
-          user = cached;
-        } else if (cached.password && cached.password !== password) {
-          // Password di cache ada tapi salah → tidak perlu ke Supabase
-          return showLoginErr();
-        }
-        // Jika cached.password tidak ada, lanjut ke Supabase (mungkin cached tanpa password)
+      // ── Langkah 1: Verifikasi AMAN via Supabase RPC verify_login ──
+      // Aktif setelah hardening SQL dijalankan. Password dibandingkan di server
+      // (bcrypt) dan kolom password TIDAK pernah dikirim ke browser.
+      if (DB.remoteClient) {
+        try {
+          const { data, error } = await DB.remoteClient.rpc('verify_login', {
+            p_username: username,
+            p_password: password,
+          });
+          if (!error) {
+            verifiedViaRpc = true;                       // RPC tersedia
+            const row = Array.isArray(data) ? data[0] : data;
+            if (row) user = row;                         // kredensial cocok
+            else return showLoginErr();                  // tidak cocok → gagal
+          }
+          // Jika error (mis. fungsi belum dibuat) → pakai cara lama di bawah
+        } catch (_) { /* fallback ke cara lama */ }
       }
 
-      // ── Langkah 2: Ambil langsung dari Supabase jika belum dapat user ──
-      if (!user && DB.remoteClient) {
-        const remote = await DB.fetchUserByUsername(username);
-        if (!remote) return showLoginErr();               // username tidak ada
-        if (remote.password !== password) return showLoginErr(); // password salah
+      // ── Langkah 2 (fallback, sebelum hardening): cache localStorage ──
+      if (!user && !verifiedViaRpc) {
+        const cached = DB.getUserByUsername(username);
+        if (cached && cached.password) {
+          if (cached.password === password) user = cached;
+          else return showLoginErr();
+        }
+      }
 
-        // Simpan ke localStorage WITH password agar login berikutnya pakai cache
-        const list = DB.getUsers();
-        const idx  = list.findIndex(u => u.username === remote.username);
-        if (idx !== -1) list[idx] = remote; else list.push(remote);
-        DB.set(DB.KEYS.users, list);
+      // ── Langkah 3 (fallback, sebelum hardening): baca tabel users via anon ──
+      if (!user && !verifiedViaRpc && DB.remoteClient) {
+        const remote = await DB.fetchUserByUsername(username);
+        if (!remote) return showLoginErr();
+        if (remote.password !== password) return showLoginErr();
         user = remote;
       }
 
-      // ── Langkah 3: Gagal total ──
+      // ── Gagal total ──
       if (!user) return showLoginErr();
+
+      // Cache profil ke localStorage TANPA menyimpan password (jangan cache kredensial)
+      const { password: _pw, ...safeUser } = user;
+      {
+        const list = DB.getUsers();
+        const idx  = list.findIndex(u => u.id === safeUser.id || u.username === safeUser.username);
+        if (idx !== -1) list[idx] = { ...list[idx], ...safeUser }; else list.push(safeUser);
+        DB.set(DB.KEYS.users, list);
+      }
+      user = safeUser;
 
       // ── Sukses ──
       errEl.classList.add('hidden');
