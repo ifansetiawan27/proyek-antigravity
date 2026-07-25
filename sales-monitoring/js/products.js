@@ -141,7 +141,7 @@ const Products = {
       </div>
 
       <!-- SVG Chart -->
-      <div style="padding:0 8px 8px;">
+      <div class="billboard-chart-scroll" style="padding:0 8px 8px;">
         <svg viewBox="0 0 ${W} ${H}" width="100%" style="display:block;overflow:visible;" xmlns="http://www.w3.org/2000/svg">
           <defs>
             <linearGradient id="billboardGrad" x1="0" y1="0" x2="0" y2="1">
@@ -261,10 +261,7 @@ const Products = {
             <div class="product-rank-name">${prod.name}</div>
             ${catLabel ? `<span style="font-size:10px;padding:1px 7px;border-radius:20px;background:var(--bg-input);color:var(--text-muted);border:1px solid var(--border-subtle);">${catLabel}</span>` : ''}
           </div>
-          <div style="display:flex;align-items:center;gap:6px;margin-top:2px;">
-            <span style="font-size:11px;color:var(--text-muted);">${txCount}× dipesan</span>
-          </div>
-          <div class="product-rank-prog" style="margin-top:6px;">
+          <div class="product-rank-prog" style="margin-top:8px;">
             <div class="product-rank-prog-fill" style="width:${pct}%;background:${barClr};"></div>
           </div>
         </div>

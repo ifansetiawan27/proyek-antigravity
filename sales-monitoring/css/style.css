@@ -2011,3 +2011,44 @@ body.mobile-preview .stats-grid { grid-template-columns: 1fr 1fr !important; gap
 body.mobile-preview .stat-card { padding: 12px; }
 body.mobile-preview .stat-value { font-size: 20px; }
 body.mobile-preview .appsheet-btn-label { display: none; }
+
+/* ============================================================
+   MOBILE POLISH — merapikan tabel, kartu & 20 Best Products di HP
+   ============================================================ */
+
+/* Chart popularitas: bisa digeser horizontal agar label tetap terbaca di HP */
+.billboard-chart-scroll { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.billboard-chart-scroll svg { display: block; }
+
+@media (max-width: 768px) {
+  /* Tabel: scroll horizontal yang rapi + jarak sel lebih pas */
+  .table-wrapper {
+    -webkit-overflow-scrolling: touch;
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-md);
+  }
+  .table { min-width: 560px; }
+  .pipeline-table { min-width: 720px; }
+  .table th { padding: 10px 12px; }
+  .table td { padding: 11px 12px; }
+
+  /* 20 Best Products: item ranking lebih ringkas, tidak berdesakan */
+  .product-rank-item { gap: 10px; padding: 12px; }
+  .rank-num { width: 26px; font-size: 16px; }
+  .product-rank-name { font-size: 12px; }
+  .product-rank-val-main { font-size: 12px; white-space: nowrap; }
+
+  /* Chart: paksa lebar minimum agar kurva & label terbaca (geser untuk lihat semua) */
+  .billboard-chart-scroll svg { min-width: 640px; }
+
+  /* Modal lebih pas di layar kecil */
+  .modal-overlay { padding: 12px; }
+  .modal-header { padding: 16px; }
+  .modal-body { padding: 16px; }
+}
+
+@media (max-width: 480px) {
+  .page-content { padding: 14px; }
+  .product-rank-val-main { font-size: 11px; }
+  .billboard-chart-scroll svg { min-width: 560px; }
+}
