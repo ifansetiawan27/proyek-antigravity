@@ -465,6 +465,11 @@ const App = {
             <span class="appsheet-btn-label">Export Excel</span>
           </button>
           ${isManager ? `
+          <button class="btn btn-danger btn-sm" onclick="App.clearStockData()" title="Bersihkan semua data stock (KBT/SBI/KDS) untuk upload ulang">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4h6v2"/></svg>
+            <span class="appsheet-btn-label">Clear Data</span>
+          </button>` : ''}
+          ${isManager ? `
           <button class="btn btn-ghost btn-sm" onclick="App.openStockForm()">
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
             <span class="appsheet-btn-label">Tambah Manual</span>
@@ -778,6 +783,30 @@ const App = {
       }, 50);
     };
     reader.readAsArrayBuffer(file);
+  },
+
+  // ── Clear Data: bersihkan SEMUA data stock (KBT/SBI/KDS/manual) — lokal + Supabase ──
+  async clearStockData() {
+    const jml = DB.getStock().length;
+    if (!jml) { App.Toast.show('Data stock sudah kosong', 'info'); return; }
+    const ok = confirm(
+      `Bersihkan SEMUA ${jml} data stock (KBT + SBI + KDS + manual)?\n\n` +
+      `Data akan dihapus dari perangkat ini DAN dari database Supabase, ` +
+      `agar bisa di-upload ulang dari awal. Tindakan ini tidak dapat dibatalkan.`
+    );
+    if (!ok) return;
+    App.Toast.show('Menghapus semua data stock...', 'info');
+    try {
+      await DB.clearStock();
+      // Reset filter & halaman ke awal (data lain TIDAK disentuh)
+      this._stockFilter = { search: '', kategori: 'all', gudang: 'all', sumber: 'all', page: 0 };
+      const content = document.getElementById('page-content');
+      if (content) content.innerHTML = this.renderAppsheet();
+      App.Toast.show(`${jml} data stock berhasil dibersihkan. Silakan upload data baru.`, 'success');
+    } catch (err) {
+      console.error('Clear stock error:', err);
+      App.Toast.show('Gagal menghapus data stock di server. Coba lagi.', 'error');
+    }
   },
 
   renderSalesDashboard(user) {

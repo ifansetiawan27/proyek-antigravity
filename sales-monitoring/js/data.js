@@ -374,6 +374,18 @@ const DB = {
     this.set(this.KEYS.stock, this.getStock().filter(s => s.id !== id));
     this.remoteDelete('stock', id);
   },
+  // Kosongkan SELURUH data stock — hapus di Supabase lalu localStorage (fitur Clear Data).
+  // Hanya menyentuh tabel 'stock', tidak mengubah data lain.
+  async clearStock() {
+    // 1) Hapus semua baris di Supabase dulu (HANYA tabel stock)
+    if (this.remoteClient) {
+      const { error } = await this.remoteClient.from('stock').delete().not('id', 'is', null);
+      if (error) { console.warn('Supabase clear stock error', error); throw error; }
+    }
+    // 2) Kosongkan localStorage
+    this.set(this.KEYS.stock, []);
+    localStorage.removeItem('sm_stock_seeded');
+  },
   upsertStockByKode(row) {
     const existing = this.getStockByKode(row.kode);
     if (existing) { this.updateStock(existing.id, row); return 'updated'; }
