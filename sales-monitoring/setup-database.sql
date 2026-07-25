@@ -81,7 +81,8 @@ CREATE TABLE IF NOT EXISTS public.pipeline (
   status           TEXT,   -- 'Perkenalan'|'Demo unit'|'Submit Quotation'|'Negosiasi'|'Deal'|'Lost'
   notes            TEXT,
   "salesId"        TEXT    REFERENCES public.users(id) ON DELETE SET NULL,
-  "createdAt"      TEXT    NOT NULL DEFAULT ''
+  "createdAt"      TEXT    NOT NULL DEFAULT '',
+  "statusHistory"  JSONB   NOT NULL DEFAULT '[]'   -- riwayat status per bulan (dari aplikasi)
 );
 
 -- ── Tabel: stock ──────────────────────────────────────────────

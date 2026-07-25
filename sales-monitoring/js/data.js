@@ -178,7 +178,8 @@ const DB = {
       status TEXT,
       notes TEXT,
       "salesId" TEXT,
-      "createdAt" TEXT
+      "createdAt" TEXT,
+      "statusHistory" JSONB DEFAULT '[]'
     );
     CREATE TABLE IF NOT EXISTS stock (
       id TEXT PRIMARY KEY,
