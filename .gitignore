@@ -2,8 +2,11 @@
 # .gitignore — SalesMonitor Project
 # ============================================================
 
-# Konfigurasi Supabase (berisi API key, jangan di-commit)
-sales-monitoring/js/config.js
+# Konfigurasi Supabase:
+# config.js SENGAJA di-commit — isinya hanya publishable/anon key yang memang
+# tampil di browser, dan WAJIB ikut ter-deploy agar data tersimpan ke Supabase.
+# (Jangan pernah menaruh service_role key di sana.)
+# sales-monitoring/js/config.js
 sales-monitoring/.env
 .env
 .env.local

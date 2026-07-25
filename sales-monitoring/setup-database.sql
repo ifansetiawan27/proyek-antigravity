@@ -147,7 +147,7 @@ DELETE FROM public.users WHERE id IN ('u_mgr1','u_s1','u_s2','u_s3','u_s4','u_s5
 
 INSERT INTO public.users (id, name, username, password, role, area, target, avatar) VALUES
   ('u_mgr1', 'Johan',         'admin',   'Admin@2026',  'manager', 'All',     0,        'Jo'),
-  ('u_s1',   'Ifan Setiawan', 'ifan',    'Sales@2026',  'sales',   'Jakarta', 50000000, 'I'),
+  ('u_s1',   'Ifan',          'ifan',    'Sales@2026',  'sales',   'Jakarta', 50000000, 'I'),
   ('u_s2',   'Cici',          'cici',    'Sales@2026',  'sales',   'Jakarta', 45000000, 'C'),
   ('u_s3',   'Iqbal',         'iqbal',   'Sales@2026',  'sales',   'Jakarta', 40000000, 'Q'),
   ('u_s4',   'Pirman',        'pirman',  'Sales@2026',  'sales',   'Jakarta', 42000000, 'P'),
