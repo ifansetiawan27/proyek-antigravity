@@ -17,11 +17,11 @@ const Transactions = {
 
     return `
     <div class="fade-in">
-      <div class="transactions-grid" style="display: grid; grid-template-columns: ${isManager ? '1fr' : 'minmax(0, 360px) 1fr'}; gap: 24px; align-items: start;">
+      <div class="transactions-grid" style="display:grid;grid-template-columns:1fr;gap:24px;align-items:start;">
         
-        <!-- LEFT PANEL: PENCATATAN PENJUALAN -->
+        <!-- TOP PANEL: PENCATATAN PENJUALAN -->
         ${!isManager ? `
-        <div class="card" style="position: sticky; top: calc(var(--topbar-h) + 12px); z-index: 10;">
+        <div class="card">
           <div class="card-header" style="border-bottom: 1px solid var(--border-subtle); padding-bottom: 12px; margin-bottom: 16px;">
             <h3 class="card-title" style="display:flex; align-items:center; gap:8px; font-size:14px; text-transform:uppercase; letter-spacing:0.5px;">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="color:var(--primary)"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
@@ -64,7 +64,7 @@ const Transactions = {
         </div>
         ` : ''}
 
-        <!-- RIGHT PANEL: ANALYTICS + LOGBOOK -->
+        <!-- ANALYTICS + LOGBOOK -->
         <div style="display:flex; flex-direction:column; gap:24px; min-width:0;">
           
           <!-- TOP: PEMBELIAN TERBANYAK PER DOKTER -->

@@ -314,7 +314,7 @@ const Reports = {
           <div style="font-size:11px;color:var(--text-muted);margin-top:2px;">${item.clinicName}</div>
         </td>
         <td style="font-size:13px;font-weight:500;max-width:200px;">
-          <div style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis;" title="${item.itemName}">${item.itemName}</div>
+          <div style="white-space:normal;overflow-wrap:anywhere;word-break:break-word;line-height:1.5;" title="${item.itemName}">${item.itemName}</div>
         </td>
         <td style="font-size:13px;font-weight:700;color:var(--primary);white-space:nowrap;">
           ${this.formatEstimasi(item.estimatedValue)}
