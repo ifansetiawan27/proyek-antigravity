@@ -39,9 +39,9 @@ Deno.serve(async (request) => {
 
   const prompt = `Baca faktur penjualan PDF ini secara akurat, termasuk jika berupa hasil scan.
 Ambil HANYA:
-1. Semua nama barang/produk/alkes/obat yang benar-benar tercantum sebagai item penjualan.
+1. Semua nama barang/produk/alkes/obat yang benar-benar tercantum sebagai item penjualan. Kembalikan nama barangnya saja tanpa kode barang, SKU, item code, nomor urut, qty, satuan, merek pada kolom terpisah, atau nilai lain dari kolom tabel.
 2. Total akhir yang harus dibayar (prioritaskan Grand Total/Total Tagihan/Amount Due, setelah diskon dan pajak).
-Jangan ambil nama klinik, rumah sakit, dokter, sales, nomor faktur, tanggal, alamat, subtotal, pajak, diskon, harga satuan, atau jumlah per baris.
+Jangan ambil kode barang/SKU/item code, nama klinik, rumah sakit, dokter, sales, nomor faktur, tanggal, alamat, subtotal, pajak, diskon, harga satuan, qty, satuan, atau jumlah per baris.
 Jangan menebak. Jika tidak ditemukan gunakan array kosong atau 0.`
 
   try {

@@ -506,12 +506,10 @@ const Transactions = {
     const payload = await response.json().catch(() => ({}));
     if (!response.ok) throw new Error(payload.error || 'Layanan AI belum aktif.');
 
-    const items = Array.isArray(payload.items)
-      ? payload.items.map(item => (item || '').toString().trim()).filter(Boolean).slice(0, 20)
-      : [];
+    const items = this.sanitizeInvoiceItems(Array.isArray(payload.items) ? payload.items : []);
     const total = Number(payload.total) || 0;
     if (!items.length && !total) throw new Error('AI tidak menemukan data faktur.');
-    return { items: [...new Set(items)], total };
+    return { items, total };
   },
 
   async extractInvoiceTextWithOcr(pdf) {
@@ -576,7 +574,39 @@ const Transactions = {
       }
     }
 
-    return { items: [...new Set(items)].slice(0, 20), total };
+    return { items: this.sanitizeInvoiceItems(items), total };
+  },
+
+  sanitizeInvoiceItems(items) {
+    const catalogue = [
+      ...DB.getProducts().map(product => ({ name: product.name, code: product.sku })),
+      ...DB.getStock().map(stock => ({ name: stock.nama, code: stock.kode })),
+    ]
+      .filter(item => item.name)
+      .sort((a, b) => b.name.length - a.name.length);
+
+    const cleaned = items.map(rawItem => {
+      let value = String(rawItem || '').replace(/\s+/g, ' ').trim();
+      if (!value) return '';
+      const normalizedValue = this.normalizeInvoiceText(value);
+      const catalogueMatch = catalogue.find(item => normalizedValue.includes(this.normalizeInvoiceText(item.name)));
+      if (catalogueMatch) return catalogueMatch.name;
+
+      catalogue.forEach(item => {
+        if (!item.code) return;
+        const escapedCode = String(item.code).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        value = value.replace(new RegExp(`(^|[|:;,-]\\s*)${escapedCode}(?=\\s|[|:;,-]|$)`, 'ig'), '$1');
+      });
+
+      return value
+        .replace(/^(?:(?:kode(?:\s*barang)?|code|sku|item\s*code|product\s*code)\s*[:#-]?\s*)/i, '')
+        .replace(/^(?:[A-Z0-9]{2,}(?:[-./][A-Z0-9]{1,})+|\d{4,})\s*(?:[|:;,-]\s*|\s+)/i, '')
+        .replace(/\s*(?:[|:;,-]\s*)?(?:kode|code|sku)\s*[:#-]?\s*[A-Z0-9][A-Z0-9./-]*$/i, '')
+        .replace(/^[|:;,-]+|[|:;,-]+$/g, '')
+        .trim();
+    }).filter(value => value.length >= 2 && /[a-z]/i.test(value));
+
+    return [...new Set(cleaned)].slice(0, 20);
   },
 
   extractInvoiceTableItems(lines) {
