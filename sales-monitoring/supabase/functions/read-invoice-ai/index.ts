@@ -40,7 +40,7 @@ Deno.serve(async (request) => {
   const prompt = `Baca faktur penjualan PDF ini secara akurat, termasuk jika berupa hasil scan.
 Ambil HANYA:
 1. Nama dokter/instansi RS yang memesan. Untuk format faktur ini, PRIORITASKAN teks BOLD/TEBAL yang posisinya tepat di bawah label "Alamat Pengiriman" sebagai requester. Jangan mengambil baris alamat sebenarnya (Jl./Jalan, nomor, RT/RW, kota, kode pos). Bagian "Nomor Faktur", "No. Faktur", dan "Kepada:" hanya petunjuk fallback. Jangan pernah mengembalikan tanggal, nomor faktur, kode, header tabel, alamat, nomor telepon, email, atau teks biaya sebagai requester.
-2. Semua nama barang/produk/alkes/obat yang benar-benar tercantum sebagai item penjualan. Kembalikan nama barangnya saja tanpa kode barang, SKU, item code, nomor urut, qty, satuan, merek pada kolom terpisah, atau nilai lain dari kolom tabel.
+2. SEMUA nama barang/produk/alkes/obat dari setiap baris item penjualan, bukan hanya barang pertama atau barang yang dikenal. Periksa seluruh halaman dan seluruh baris tabel. Kembalikan nama barangnya saja tanpa kode barang, SKU, item code, nomor urut, qty, satuan, merek pada kolom terpisah, atau nilai lain dari kolom tabel.
 3. Total akhir yang harus dibayar (prioritaskan Grand Total/Total Tagihan/Amount Due, setelah diskon dan pajak).
 Teks "Nama", "Biaya", "Jumlah", "Penggantian", "Biaya Pengiriman", ongkir, shipping fee, dan delivery fee BUKAN nama barang dan tidak boleh dimasukkan ke items.
 Jangan ambil kode barang/SKU/item code, nama klinik, rumah sakit, dokter, sales, nomor faktur, tanggal, alamat, subtotal, pajak, diskon, harga satuan, qty, satuan, biaya pengiriman, ongkir, atau jumlah per baris sebagai items.

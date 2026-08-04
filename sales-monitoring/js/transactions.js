@@ -418,22 +418,21 @@ const Transactions = {
     this.setInvoicePdfStatus(`Membaca ${file.name}...`, 'loading');
 
     try {
-      let result = null;
+      let aiResult = null;
       try {
-        result = await this.extractInvoiceWithAi(file);
+        aiResult = await this.extractInvoiceWithAi(file);
       } catch (aiError) {
         console.warn('AI invoice reader fallback:', aiError.message);
         this.setInvoicePdfStatus('AI belum tersedia. Mencoba pembaca PDF lokal...', 'warning');
       }
 
-      if (!result) {
-        if (!window.pdfjsLib) throw new Error('Pembaca PDF gagal dimuat. Muat ulang halaman lalu coba lagi.');
-        window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-        const pdf = await window.pdfjsLib.getDocument({ data: await file.arrayBuffer() }).promise;
-        let lines = [];
-        let lineDetails = [];
+      if (!window.pdfjsLib) throw new Error('Pembaca PDF gagal dimuat. Muat ulang halaman lalu coba lagi.');
+      window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+      const pdf = await window.pdfjsLib.getDocument({ data: await file.arrayBuffer() }).promise;
+      let lines = [];
+      const lineDetails = [];
 
-        for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber++) {
+      for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber++) {
           const page = await pdf.getPage(pageNumber);
           const content = await page.getTextContent();
           const pageLines = new Map();
@@ -465,17 +464,16 @@ const Transactions = {
                 size: Math.max(...sortedParts.map(part => part.size || 0)),
               });
             });
-        }
-
-        result = this.extractInvoiceData(lines, lineDetails);
-
-        if (!result.items.length || !result.total) {
-          this.setInvoicePdfStatus('Membaca faktur dengan OCR...', 'loading');
-          const ocrLines = await this.extractInvoiceTextWithOcr(pdf);
-          lines = [...lines, ...ocrLines];
-          result = this.extractInvoiceData(lines, lineDetails);
-        }
       }
+
+      let localResult = this.extractInvoiceData(lines, lineDetails);
+      if (!aiResult || !localResult.items.length || !localResult.total) {
+        this.setInvoicePdfStatus('Memastikan seluruh nama barang dengan OCR...', 'loading');
+        const ocrLines = await this.extractInvoiceTextWithOcr(pdf);
+        lines = [...lines, ...ocrLines];
+        localResult = this.extractInvoiceData(lines, lineDetails);
+      }
+      const result = this.mergeInvoiceResults(aiResult, localResult);
       const requester = document.getElementById('f-doctor');
       const items = document.getElementById('f-items-text');
       const total = document.getElementById('f-total-amount');
@@ -507,6 +505,16 @@ const Transactions = {
       if (button) button.disabled = false;
       if (input) input.value = '';
     }
+  },
+
+  mergeInvoiceResults(aiResult, localResult) {
+    const ai = aiResult || { requester: '', items: [], total: 0 };
+    const local = localResult || { requester: '', items: [], total: 0 };
+    return {
+      requester: local.requester || ai.requester || '',
+      items: this.sanitizeInvoiceItems([...(ai.items || []), ...(local.items || [])]),
+      total: Number(ai.total) || Number(local.total) || 0,
+    };
   },
 
   async extractInvoiceWithAi(file) {
@@ -573,16 +581,14 @@ const Transactions = {
       .sort((a, b) => b.length - a.length);
     const items = catalogue.filter(name => normalizedText.includes(this.normalizeInvoiceText(name)));
 
-    if (!items.length) {
-      const itemLabel = /^(?:nama\s*)?(?:barang|produk|item|alkes|obat|paket|deskripsi|description)\s*(?::|-)?\s*(.*)$/i;
-      cleanLines.forEach((line, index) => {
-        const match = line.match(itemLabel);
-        const value = match && (match[1] || cleanLines[index + 1] || '').trim();
-        if (value && !/^(?:qty|jumlah|harga|price|total)$/i.test(value)) items.push(value);
-      });
-    }
+    const itemLabel = /^(?:nama\s*)?(?:barang|produk|item|alkes|obat|paket|deskripsi|description)\s*(?::|-)?\s*(.*)$/i;
+    cleanLines.forEach((line, index) => {
+      const match = line.match(itemLabel);
+      const value = match && (match[1] || cleanLines[index + 1] || '').trim();
+      if (value && !/(?:qty|jumlah|harga|price|amount|total|biaya)/i.test(value)) items.push(value);
+    });
 
-    if (!items.length) items.push(...this.extractInvoiceTableItems(cleanLines));
+    items.push(...this.extractInvoiceTableItems(cleanLines));
 
     const totalLabels = ['grand\\s*total', 'total\\s*(?:tagihan|pembayaran|penjualan|belanja|invoice)', 'jumlah\\s*tagihan', 'amount\\s*due', '(?<!sub)total'];
     let total = 0;
@@ -709,6 +715,7 @@ const Transactions = {
 
   extractInvoiceTableItems(lines) {
     const headerPattern = /(?:nama\s*)?(?:barang|produk|item|alkes|obat|paket|deskripsi|description)/i;
+    const compactHeaderPattern = /\bnama\b.*\b(?:biaya|harga|price)\b.*\b(?:jumlah|total|amount)\b/i;
     const stopPattern = /^(?:sub\s*total|subtotal|grand\s*total|total\s*(?:tagihan|pembayaran|belanja|invoice)?|ppn|pajak|diskon|discount|amount\s*due|terbilang)/i;
     const noisePattern = /(?:invoice|faktur|tanggal|date|customer|pelanggan|pemesan|pembeli|kepada|bill\s*to|ship\s*to|alamat|address|telepon|phone|email|rekening|bank|jatuh\s*tempo|due\s*date|penggantian|biaya\s*(?:pengiriman|kirim)|ongkos\s*kirim|ongkir|shipping|delivery)/i;
     const unitPattern = /\b\d+(?:[.,]\d+)?\s*(?:pcs?|unit|box|pak|pack|set|buah|bh|botol|ampul|vial|tablet|strip|roll|lusin)\b/i;
@@ -716,7 +723,7 @@ const Transactions = {
     let inTable = false;
 
     lines.forEach(line => {
-      if (headerPattern.test(line) && /(?:qty|jumlah|harga|price|amount|total)/i.test(line)) {
+      if ((headerPattern.test(line) && /(?:qty|jumlah|harga|price|amount|total)/i.test(line)) || compactHeaderPattern.test(line)) {
         inTable = true;
         return;
       }
