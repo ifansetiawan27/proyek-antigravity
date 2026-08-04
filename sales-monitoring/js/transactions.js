@@ -431,6 +431,7 @@ const Transactions = {
         window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
         const pdf = await window.pdfjsLib.getDocument({ data: await file.arrayBuffer() }).promise;
         let lines = [];
+        let lineDetails = [];
 
         for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber++) {
           const page = await pdf.getPage(pageNumber);
@@ -442,24 +443,37 @@ const Transactions = {
             if (!text) return;
             const y = Math.round(item.transform[5] / 3) * 3;
             const parts = pageLines.get(y) || [];
-            parts.push({ x: item.transform[4], text });
+            const style = content.styles[item.fontName] || {};
+            parts.push({
+              x: item.transform[4],
+              text,
+              font: `${item.fontName || ''} ${style.fontFamily || ''}`,
+              size: Math.abs(item.transform[3]) || item.height || 0,
+            });
             pageLines.set(y, parts);
           });
 
           [...pageLines.entries()]
             .sort((a, b) => b[0] - a[0])
             .forEach(([, parts]) => {
-              lines.push(parts.sort((a, b) => a.x - b.x).map(part => part.text).join(' ').replace(/\s+/g, ' ').trim());
+              const sortedParts = parts.sort((a, b) => a.x - b.x);
+              const text = sortedParts.map(part => part.text).join(' ').replace(/\s+/g, ' ').trim();
+              lines.push(text);
+              lineDetails.push({
+                text,
+                bold: sortedParts.some(part => /bold|semibold|demi|black|heavy|700|600/i.test(part.font)),
+                size: Math.max(...sortedParts.map(part => part.size || 0)),
+              });
             });
         }
 
-        result = this.extractInvoiceData(lines);
+        result = this.extractInvoiceData(lines, lineDetails);
 
         if (!result.items.length || !result.total) {
           this.setInvoicePdfStatus('Membaca faktur dengan OCR...', 'loading');
           const ocrLines = await this.extractInvoiceTextWithOcr(pdf);
           lines = [...lines, ...ocrLines];
-          result = this.extractInvoiceData(lines);
+          result = this.extractInvoiceData(lines, lineDetails);
         }
       }
       const requester = document.getElementById('f-doctor');
@@ -548,11 +562,11 @@ const Transactions = {
     return lines;
   },
 
-  extractInvoiceData(lines) {
+  extractInvoiceData(lines, lineDetails = []) {
     const cleanLines = lines.map(line => line.replace(/\s+/g, ' ').trim()).filter(Boolean);
     const fullText = cleanLines.join('\n');
     const normalizedText = this.normalizeInvoiceText(fullText);
-    const requester = this.extractInvoiceRequester(cleanLines);
+    const requester = this.extractInvoiceRequester(cleanLines, lineDetails);
     const catalogue = [...DB.getProducts().map(product => product.name), ...DB.getStock().map(stock => stock.nama)]
       .filter(Boolean)
       .filter((name, index, all) => all.findIndex(item => item.toLowerCase() === name.toLowerCase()) === index)
@@ -584,13 +598,34 @@ const Transactions = {
     return { requester, items: this.sanitizeInvoiceItems(items), total };
   },
 
-  extractInvoiceRequester(lines) {
+  extractInvoiceRequester(lines, lineDetails = []) {
     const labels = /^(?:(?:nama\s*)?(?:pemesan|pembeli|customer|pelanggan|bill\s*to|ship\s*to)|kepada(?:\s+yth\.?)?)\s*(?::|-)?\s*(.*)$/i;
+    const invalidRequester = /^(?:nama(?:\s*barang)?|barang|produk|deskripsi|description|kode|sku|qty|jumlah|harga|price|amount|total|biaya|penggantian|pengiriman|alamat|address|telepon|phone|email|tanggal|date|invoice|faktur|ppn|pajak|diskon|discount)\b/i;
+    const cleanRequester = value => (value || '')
+      .replace(/^yth\.?\s*/i, '')
+      .replace(/\s{2,}.*$/, '')
+      .replace(/^[|:;,-]+|[|:;,-]+$/g, '')
+      .trim();
+
     for (let index = 0; index < lines.length; index++) {
       const match = lines[index].match(labels);
       if (!match) continue;
-      const value = (match[1] || lines[index + 1] || '').replace(/^yth\.?\s*/i, '').replace(/\s{2,}.*$/, '').trim();
-      if (value && !/^(?:nama|alamat|address|telepon|phone|email|tanggal|date)$/i.test(value)) return value;
+      const inlineValue = cleanRequester(match[1]);
+      if (inlineValue && !invalidRequester.test(inlineValue)) return inlineValue;
+
+      const candidates = [1, 2]
+        .map(offset => {
+          const value = cleanRequester(lines[index + offset]);
+          const detail = lineDetails[index + offset] || {};
+          return { value, offset, bold: Boolean(detail.bold), size: Number(detail.size) || 0 };
+        })
+        .filter(candidate => candidate.value && !invalidRequester.test(candidate.value) && /[a-z]/i.test(candidate.value) && !/^\d[\d\s./-]*$/.test(candidate.value));
+
+      const boldCandidate = candidates
+        .filter(candidate => candidate.bold)
+        .sort((a, b) => a.offset - b.offset || b.size - a.size)[0];
+      if (boldCandidate) return boldCandidate.value;
+      if (candidates[0]) return candidates[0].value;
     }
     return '';
   },
