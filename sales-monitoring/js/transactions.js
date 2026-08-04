@@ -600,6 +600,7 @@ const Transactions = {
 
   extractInvoiceRequester(lines, lineDetails = []) {
     const labels = /^(?:(?:nama\s*)?(?:pemesan|pembeli|customer|pelanggan|bill\s*to|ship\s*to)|kepada(?:\s+yth\.?)?)\s*(?::|-)?\s*(.*)$/i;
+    const shippingAddressLabel = /^(?:alamat\s*(?:pengiriman|kirim)|shipping\s*address|delivery\s*address)\s*(?::|-)?\s*(.*)$/i;
     const invoiceLabel = /^(?:(?:no(?:mor)?\.?\s*)?(?:faktur|invoice)|(?:faktur|invoice)\s*(?:no(?:mor)?\.?|number|#))\b/i;
     const invalidRequester = /^(?:nama(?:\s*barang)?|barang|produk|deskripsi|description|kode|sku|qty|jumlah|harga|price|amount|total|biaya|penggantian|pengiriman|alamat|address|telepon|phone|email|tanggal|date|invoice|faktur|ppn|pajak|diskon|discount)\b/i;
     const cleanRequester = value => (value || '')
@@ -613,6 +614,7 @@ const Transactions = {
       if (/^(?:\d{1,2}\s+)?(?:jan(?:uari)?|feb(?:ruari)?|mar(?:et)?|apr(?:il)?|mei|jun(?:i)?|jul(?:i)?|agu(?:stus)?|sep(?:tember)?|okt(?:ober)?|nov(?:ember)?|des(?:ember)?)(?:\s+\d{2,4})?$/i.test(value)) return false;
       if (/^(?=[A-Z0-9./-]*\d)[A-Z0-9]+(?:[./-][A-Z0-9]+)+$/i.test(value)) return false;
       if (/^(?:rp\.?\s*)?[\d.,\s]+$/.test(value)) return false;
+      if (/^(?:jl\.?|jln\.?|jalan|komplek|kompleks|perumahan|ruko|blok|no\.?|nomor|rt\.?|rw\.?|kelurahan|kecamatan|kabupaten|kota|provinsi|kode\s*pos)\b/i.test(value)) return false;
       return true;
     };
     const getCandidates = (index, offsets) => offsets
@@ -628,6 +630,15 @@ const Transactions = {
         .sort((a, b) => a.offset - b.offset || b.size - a.size)[0];
       return boldCandidate || candidates[0];
     };
+
+    for (let index = 0; index < lines.length; index++) {
+      const match = lines[index].match(shippingAddressLabel);
+      if (!match) continue;
+      const inlineValue = cleanRequester(match[1]);
+      if (isValidRequester(inlineValue)) return inlineValue;
+      const candidate = selectCandidate(getCandidates(index, [1, 2, 3]));
+      if (candidate) return candidate.value;
+    }
 
     for (let index = 0; index < lines.length; index++) {
       if (!invoiceLabel.test(lines[index])) continue;
@@ -652,6 +663,7 @@ const Transactions = {
     if (/^(?:\d{1,2}[\s./-]){1,2}\d{2,4}$/.test(requester)) return '';
     if (/^(?:\d{1,2}\s+)?(?:jan(?:uari)?|feb(?:ruari)?|mar(?:et)?|apr(?:il)?|mei|jun(?:i)?|jul(?:i)?|agu(?:stus)?|sep(?:tember)?|okt(?:ober)?|nov(?:ember)?|des(?:ember)?)(?:\s+\d{2,4})?$/i.test(requester)) return '';
     if (/^(?=[A-Z0-9./-]*\d)[A-Z0-9]+(?:[./-][A-Z0-9]+)+$/i.test(requester)) return '';
+    if (/^(?:jl\.?|jln\.?|jalan|komplek|kompleks|perumahan|ruko|blok|no\.?|nomor|rt\.?|rw\.?|kelurahan|kecamatan|kabupaten|kota|provinsi|kode\s*pos)\b/i.test(requester)) return '';
     return requester;
   },
 
