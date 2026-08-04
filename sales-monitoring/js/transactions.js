@@ -430,7 +430,7 @@ const Transactions = {
         if (!window.pdfjsLib) throw new Error('Pembaca PDF gagal dimuat. Muat ulang halaman lalu coba lagi.');
         window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
         const pdf = await window.pdfjsLib.getDocument({ data: await file.arrayBuffer() }).promise;
-        const lines = [];
+        let lines = [];
 
         for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber++) {
           const page = await pdf.getPage(pageNumber);
@@ -453,8 +453,14 @@ const Transactions = {
             });
         }
 
-        if (!lines.join(' ').trim()) throw new Error('AI belum aktif dan PDF tidak memiliki lapisan teks.');
         result = this.extractInvoiceData(lines);
+
+        if (!result.items.length || !result.total) {
+          this.setInvoicePdfStatus('Membaca faktur dengan OCR...', 'loading');
+          const ocrLines = await this.extractInvoiceTextWithOcr(pdf);
+          lines = [...lines, ...ocrLines];
+          result = this.extractInvoiceData(lines);
+        }
       }
       const items = document.getElementById('f-items-text');
       const total = document.getElementById('f-total-amount');
@@ -467,7 +473,7 @@ const Transactions = {
       if (result.total && total) {
         total.value = this.formatAmountValue(result.total);
         this.onTotalAmountChange(result.total);
-        filled.push('total penjualan');
+        filled.push('total harga');
       }
 
       if (!filled.length) {
@@ -508,6 +514,36 @@ const Transactions = {
     return { items: [...new Set(items)], total };
   },
 
+  async extractInvoiceTextWithOcr(pdf) {
+    if (!window.Tesseract) throw new Error('OCR gagal dimuat. Muat ulang halaman lalu coba lagi.');
+    const lines = [];
+    const pageCount = Math.min(pdf.numPages, 6);
+
+    for (let pageNumber = 1; pageNumber <= pageCount; pageNumber++) {
+      this.setInvoicePdfStatus(`OCR halaman ${pageNumber} dari ${pageCount}...`, 'loading');
+      const page = await pdf.getPage(pageNumber);
+      const viewport = page.getViewport({ scale: 2 });
+      const canvas = document.createElement('canvas');
+      const context = canvas.getContext('2d', { willReadFrequently: true });
+      canvas.width = Math.ceil(viewport.width);
+      canvas.height = Math.ceil(viewport.height);
+      await page.render({ canvasContext: context, viewport }).promise;
+
+      const result = await window.Tesseract.recognize(canvas, 'ind+eng', {
+        logger: progress => {
+          if (progress.status === 'recognizing text') {
+            this.setInvoicePdfStatus(`OCR halaman ${pageNumber}: ${Math.round(progress.progress * 100)}%`, 'loading');
+          }
+        },
+      });
+      lines.push(...(result.data.text || '').split(/\r?\n/).map(line => line.trim()).filter(Boolean));
+      canvas.width = 0;
+      canvas.height = 0;
+    }
+
+    return lines;
+  },
+
   extractInvoiceData(lines) {
     const cleanLines = lines.map(line => line.replace(/\s+/g, ' ').trim()).filter(Boolean);
     const fullText = cleanLines.join('\n');
@@ -527,11 +563,13 @@ const Transactions = {
       });
     }
 
-    const totalLabels = ['grand\\s*total', 'total\\s*(?:tagihan|pembayaran|penjualan|belanja|invoice)', 'jumlah\\s*tagihan', 'amount\\s*due', 'total'];
+    if (!items.length) items.push(...this.extractInvoiceTableItems(cleanLines));
+
+    const totalLabels = ['grand\\s*total', 'total\\s*(?:tagihan|pembayaran|penjualan|belanja|invoice)', 'jumlah\\s*tagihan', 'amount\\s*due', '(?<!sub)total'];
     let total = 0;
     for (const label of totalLabels) {
-      const pattern = new RegExp(`${label}[^\\d\\r\\n]{0,15}(?:rp\\.?[ \\t]*)?([\\d][\\d., \\t]{2,})`, 'ig');
-      const values = [...fullText.matchAll(pattern)].map(match => this.parseInvoiceAmount(match[1])).filter(value => value > 0);
+      const matchingLines = cleanLines.filter(line => new RegExp(label, 'i').test(line));
+      const values = matchingLines.flatMap(line => this.extractAmountsFromInvoiceLine(line)).filter(value => value > 0);
       if (values.length) {
         total = Math.max(...values);
         break;
@@ -541,12 +579,64 @@ const Transactions = {
     return { items: [...new Set(items)].slice(0, 20), total };
   },
 
+  extractInvoiceTableItems(lines) {
+    const headerPattern = /(?:nama\s*)?(?:barang|produk|item|alkes|obat|paket|deskripsi|description)/i;
+    const stopPattern = /^(?:sub\s*total|subtotal|grand\s*total|total\s*(?:tagihan|pembayaran|belanja|invoice)?|ppn|pajak|diskon|discount|amount\s*due|terbilang)/i;
+    const noisePattern = /(?:invoice|faktur|tanggal|date|customer|pelanggan|kepada|bill\s*to|ship\s*to|alamat|address|telepon|phone|email|rekening|bank|jatuh\s*tempo|due\s*date)/i;
+    const unitPattern = /\b\d+(?:[.,]\d+)?\s*(?:pcs?|unit|box|pak|pack|set|buah|bh|botol|ampul|vial|tablet|strip|roll|lusin)\b/i;
+    const items = [];
+    let inTable = false;
+
+    lines.forEach(line => {
+      if (headerPattern.test(line) && /(?:qty|jumlah|harga|price|amount|total)/i.test(line)) {
+        inTable = true;
+        return;
+      }
+      if (stopPattern.test(line)) {
+        inTable = false;
+        return;
+      }
+      if (!inTable || noisePattern.test(line)) return;
+
+      let value = line.replace(/^\s*(?:no\.?\s*)?\d+[.)-]?\s+/i, '').trim();
+      const unitMatch = value.match(unitPattern);
+      const amountMatch = value.match(/\s+(?:rp\.?\s*)?\d{1,3}(?:[.,\s]\d{3})+(?:[.,]\d{2})?/i);
+      const cutAt = Math.min(
+        unitMatch ? unitMatch.index : value.length,
+        amountMatch ? amountMatch.index : value.length,
+      );
+      value = value.slice(0, cutAt).replace(/\s{2,}.*$/, '').replace(/[|:;-]+$/, '').trim();
+
+      if (value.length >= 3 && /[a-z]/i.test(value) && !/^(?:no|qty|jumlah|harga|price|amount|total|satuan)$/i.test(value)) {
+        items.push(value);
+      }
+    });
+
+    return items;
+  },
+
+  extractAmountsFromInvoiceLine(line) {
+    const matches = line.match(/(?:rp\.?\s*)?\d{1,3}(?:(?:[.,\s]\d{3})+)(?:[.,]\d{2})?|(?:rp\.?\s*)?\d{4,}/gi) || [];
+    return matches.map(value => this.parseInvoiceAmount(value)).filter(value => value > 0);
+  },
+
   normalizeInvoiceText(value) {
     return (value || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
   },
 
   parseInvoiceAmount(value) {
-    const digits = (value || '').replace(/\D/g, '');
+    let normalized = (value || '').toLowerCase().replace(/rp\.?/g, '').replace(/\s/g, '').replace(/[^\d.,]/g, '');
+    const separators = [...normalized.matchAll(/[.,]/g)].map(match => match.index);
+    if (separators.length) {
+      const lastSeparator = separators[separators.length - 1];
+      const decimalLength = normalized.length - lastSeparator - 1;
+      const separator = normalized[lastSeparator];
+      const sameSeparatorCount = normalized.split(separator).length - 1;
+      if (decimalLength === 2 && (sameSeparatorCount === 1 || /[.,]/.test(normalized.slice(0, lastSeparator)))) {
+        normalized = normalized.slice(0, lastSeparator);
+      }
+    }
+    const digits = normalized.replace(/\D/g, '');
     return Number(digits) || 0;
   },
 
