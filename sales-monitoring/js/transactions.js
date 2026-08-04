@@ -681,12 +681,12 @@ const Transactions = {
   },
 
   sanitizeInvoiceItems(items) {
-    const excludedItemPattern = /^(?:nama(?:\s*barang)?|biaya|jumlah|penggantian|biaya\s*(?:pengiriman|kirim)|ongkos\s*kirim|ongkir|shipping(?:\s*(?:fee|cost))?|delivery(?:\s*(?:fee|cost))?)\s*(?::|-)?\s*$/i;
-    const excludedCostPattern = /^(?:penggantian\s*)?biaya\s*(?:pengiriman|kirim)|^(?:ongkos\s*kirim|ongkir|shipping(?:\s*(?:fee|cost))?|delivery(?:\s*(?:fee|cost))?)/i;
+    const excludedItemPattern = /^(?:nama(?:\s*barang)?|biaya|jumlah|penggantian|biaya\s*(?:pengiriman|kirim|lain(?:[\s-]*lain)?|lainnya)|ongkos\s*kirim|ongkir|shipping(?:\s*(?:fee|cost))?|delivery(?:\s*(?:fee|cost))?|other\s*(?:charges?|fees?|costs?))\s*(?::|-)?\s*$/i;
+    const excludedCostPattern = /^(?:penggantian\s*)?biaya\s*(?:pengiriman|kirim|lain(?:[\s-]*lain)?|lainnya)|^(?:ongkos\s*kirim|ongkir|shipping(?:\s*(?:fee|cost))?|delivery(?:\s*(?:fee|cost))?|other\s*(?:charges?|fees?|costs?))/i;
     const isExcludedItem = value => {
       if (excludedItemPattern.test(value) || excludedCostPattern.test(value)) return true;
       const words = this.normalizeInvoiceText(value).split(' ').filter(Boolean);
-      const metadataWords = new Set(['nama', 'barang', 'biaya', 'jumlah', 'penggantian', 'pengiriman', 'kirim', 'ongkos', 'ongkir', 'shipping', 'delivery', 'fee', 'cost']);
+      const metadataWords = new Set(['nama', 'barang', 'biaya', 'jumlah', 'penggantian', 'pengiriman', 'kirim', 'lain', 'lainnya', 'ongkos', 'ongkir', 'shipping', 'delivery', 'other', 'charge', 'charges', 'fee', 'fees', 'cost', 'costs']);
       return words.length > 0 && words.every(word => metadataWords.has(word));
     };
     const catalogue = [
@@ -725,7 +725,7 @@ const Transactions = {
     const headerPattern = /(?:nama\s*)?(?:barang|produk|item|alkes|obat|paket|deskripsi|description)/i;
     const compactHeaderPattern = /\bnama\b.*\b(?:biaya|harga|price)\b.*\b(?:jumlah|total|amount)\b/i;
     const stopPattern = /^(?:sub\s*total|subtotal|grand\s*total|total\s*(?:tagihan|pembayaran|belanja|invoice)?|ppn|pajak|diskon|discount|amount\s*due|terbilang)/i;
-    const noisePattern = /(?:invoice|faktur|tanggal|date|customer|pelanggan|pemesan|pembeli|kepada|bill\s*to|ship\s*to|alamat|address|telepon|phone|email|rekening|bank|jatuh\s*tempo|due\s*date|penggantian|biaya\s*(?:pengiriman|kirim)|ongkos\s*kirim|ongkir|shipping|delivery)/i;
+    const noisePattern = /(?:invoice|faktur|tanggal|date|customer|pelanggan|pemesan|pembeli|kepada|bill\s*to|ship\s*to|alamat|address|telepon|phone|email|rekening|bank|jatuh\s*tempo|due\s*date|penggantian|biaya\s*(?:pengiriman|kirim|lain(?:[\s-]*lain)?|lainnya)|ongkos\s*kirim|ongkir|shipping|delivery|other\s*(?:charges?|fees?|costs?))/i;
     const unitPattern = /\b\d+(?:[.,]\d+)?\s*(?:pcs?|unit|box|pak|pack|set|buah|bh|botol|ampul|vial|tablet|strip|roll|lusin)\b/i;
     const items = [];
     let inTable = false;
