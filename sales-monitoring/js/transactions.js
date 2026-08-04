@@ -36,7 +36,7 @@ const Transactions = {
                 <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><path d="M12 18v-6"/><path d="m9 15 3-3 3 3"/></svg>
                 Baca Faktur PDF dengan AI
               </button>
-              <div id="invoice-pdf-status" class="invoice-pdf-status">AI hanya mengisi nama barang dan total harga. Periksa hasilnya sebelum menyimpan.</div>
+              <div id="invoice-pdf-status" class="invoice-pdf-status">AI hanya mengisi nama dokter/instansi, nama barang, dan total harga. Periksa hasilnya sebelum menyimpan.</div>
             </div>
 
             <div class="form-group" style="margin-bottom:16px;">
@@ -467,7 +467,7 @@ const Transactions = {
       }
 
       let localResult = this.extractInvoiceData(lines, lineDetails);
-      if (!aiResult || !localResult.items.length || !localResult.total) {
+      if (!localResult.requester || !localResult.items.length || !localResult.total) {
         this.setInvoicePdfStatus('Memastikan seluruh nama barang dengan OCR...', 'loading');
         const ocrLines = await this.extractInvoiceTextWithOcr(pdf);
         lines = [...lines, ...ocrLines];
@@ -543,28 +543,35 @@ const Transactions = {
   async extractInvoiceTextWithOcr(pdf) {
     if (!window.Tesseract) throw new Error('OCR gagal dimuat. Muat ulang halaman lalu coba lagi.');
     const lines = [];
-    const pageCount = Math.min(pdf.numPages, 6);
+    const pageCount = Math.min(pdf.numPages, 3);
+    let currentPage = 1;
+    const worker = await window.Tesseract.createWorker('ind+eng', 1, {
+      logger: progress => {
+        if (progress.status === 'recognizing text') {
+          this.setInvoicePdfStatus(`OCR halaman ${currentPage}: ${Math.round(progress.progress * 100)}%`, 'loading');
+        }
+      },
+    });
 
-    for (let pageNumber = 1; pageNumber <= pageCount; pageNumber++) {
-      this.setInvoicePdfStatus(`OCR halaman ${pageNumber} dari ${pageCount}...`, 'loading');
-      const page = await pdf.getPage(pageNumber);
-      const viewport = page.getViewport({ scale: 2 });
-      const canvas = document.createElement('canvas');
-      const context = canvas.getContext('2d', { willReadFrequently: true });
-      canvas.width = Math.ceil(viewport.width);
-      canvas.height = Math.ceil(viewport.height);
-      await page.render({ canvasContext: context, viewport }).promise;
+    try {
+      for (let pageNumber = 1; pageNumber <= pageCount; pageNumber++) {
+        currentPage = pageNumber;
+        this.setInvoicePdfStatus(`OCR halaman ${pageNumber} dari ${pageCount}...`, 'loading');
+        const page = await pdf.getPage(pageNumber);
+        const viewport = page.getViewport({ scale: 1.7 });
+        const canvas = document.createElement('canvas');
+        const context = canvas.getContext('2d', { willReadFrequently: true });
+        canvas.width = Math.ceil(viewport.width);
+        canvas.height = Math.ceil(viewport.height);
+        await page.render({ canvasContext: context, viewport }).promise;
 
-      const result = await window.Tesseract.recognize(canvas, 'ind+eng', {
-        logger: progress => {
-          if (progress.status === 'recognizing text') {
-            this.setInvoicePdfStatus(`OCR halaman ${pageNumber}: ${Math.round(progress.progress * 100)}%`, 'loading');
-          }
-        },
-      });
-      lines.push(...(result.data.text || '').split(/\r?\n/).map(line => line.trim()).filter(Boolean));
-      canvas.width = 0;
-      canvas.height = 0;
+        const result = await worker.recognize(canvas);
+        lines.push(...(result.data.text || '').split(/\r?\n/).map(line => line.trim()).filter(Boolean));
+        canvas.width = 0;
+        canvas.height = 0;
+      }
+    } finally {
+      await worker.terminate();
     }
 
     return lines;
@@ -703,7 +710,8 @@ const Transactions = {
       });
 
       return value
-        .replace(/^(?:(?:kode(?:\s*barang)?|code|sku|item\s*code|product\s*code)\s*[:#-]?\s*)/i, '')
+        .replace(/^(?:kode(?:\s*barang)?|code|sku|item\s*code|product\s*code)(?:\s*[:#-]\s*|\s+)/i, '')
+        .replace(/^(?=[A-Z0-9./-]{4,20}\s)(?=[A-Z0-9./-]*[A-Z])(?=[A-Z0-9./-]*\d)[A-Z0-9./-]+\s+(?=[A-Z][a-z]|[A-Z]{2,}\s)/, '')
         .replace(/^(?:[A-Z0-9]{2,}(?:[-./][A-Z0-9]{1,})+|\d{4,})\s*(?:[|:;,-]\s*|\s+)/i, '')
         .replace(/\s*(?:[|:;,-]\s*)?(?:kode|code|sku)\s*[:#-]?\s*[A-Z0-9][A-Z0-9./-]*$/i, '')
         .replace(/^[|:;,-]+|[|:;,-]+$/g, '')
@@ -826,7 +834,7 @@ const Transactions = {
     const preview = document.getElementById('f-stamp-preview');
     if (preview) preview.innerHTML = '';
 
-    this.setInvoicePdfStatus('AI hanya mengisi nama barang dan total harga. Periksa hasilnya sebelum menyimpan.');
+    this.setInvoicePdfStatus('AI hanya mengisi nama dokter/instansi, nama barang, dan total harga. Periksa hasilnya sebelum menyimpan.');
 
     const btnSave = document.getElementById('btn-save-tx');
     const btnCancel = document.getElementById('btn-cancel-edit');
