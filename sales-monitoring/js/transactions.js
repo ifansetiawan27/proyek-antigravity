@@ -585,11 +585,11 @@ const Transactions = {
   },
 
   extractInvoiceRequester(lines) {
-    const labels = /^(?:nama\s*)?(?:pemesan|pembeli|customer|pelanggan|bill\s*to|ship\s*to)\s*(?::|-)?\s*(.*)$/i;
+    const labels = /^(?:(?:nama\s*)?(?:pemesan|pembeli|customer|pelanggan|bill\s*to|ship\s*to)|kepada(?:\s+yth\.?)?)\s*(?::|-)?\s*(.*)$/i;
     for (let index = 0; index < lines.length; index++) {
       const match = lines[index].match(labels);
       if (!match) continue;
-      const value = (match[1] || lines[index + 1] || '').replace(/\s{2,}.*$/, '').trim();
+      const value = (match[1] || lines[index + 1] || '').replace(/^yth\.?\s*/i, '').replace(/\s{2,}.*$/, '').trim();
       if (value && !/^(?:nama|alamat|address|telepon|phone|email|tanggal|date)$/i.test(value)) return value;
     }
     return '';

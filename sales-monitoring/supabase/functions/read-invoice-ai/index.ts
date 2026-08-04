@@ -39,7 +39,7 @@ Deno.serve(async (request) => {
 
   const prompt = `Baca faktur penjualan PDF ini secara akurat, termasuk jika berupa hasil scan.
 Ambil HANYA:
-1. Nama pemesan/pembeli/customer yang tercantum pada faktur.
+1. Nama pemesan/pembeli/customer yang tercantum pada faktur. Jika ada label "Kepada :", nama pemesan adalah teks pada baris yang sama setelah label atau tepat satu baris di bawah label tersebut.
 2. Semua nama barang/produk/alkes/obat yang benar-benar tercantum sebagai item penjualan. Kembalikan nama barangnya saja tanpa kode barang, SKU, item code, nomor urut, qty, satuan, merek pada kolom terpisah, atau nilai lain dari kolom tabel.
 3. Total akhir yang harus dibayar (prioritaskan Grand Total/Total Tagihan/Amount Due, setelah diskon dan pajak).
 Teks "Nama", "Biaya", "Jumlah", "Penggantian", "Biaya Pengiriman", ongkir, shipping fee, dan delivery fee BUKAN nama barang dan tidak boleh dimasukkan ke items.
