@@ -1,0 +1,4 @@
+project_id = "vrmywumkcetsvwtqhepr"
+
+[functions.read-invoice-ai]
+verify_jwt = false
