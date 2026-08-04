@@ -85,8 +85,9 @@ const Reports = {
     const user      = Auth.getCurrentUser();
     const isManager = Auth.isManager();
     const pipeline  = isManager ? DB.getPipeline() : DB.getPipelineBySales(user.id);
+    const monthlyPipeline = pipeline.filter(item => this.itemActiveInMonth(item, this._pipelineMonth));
 
-    const totalValue = pipeline.reduce((s, p) => s + (p.estimatedValue || 0), 0);
+    const totalValue = monthlyPipeline.reduce((sum, item) => sum + (Number(item.estimatedValue) || 0), 0);
     const dealCount  = pipeline.filter(p => p.status === 'Deal').length;
     const negoCount  = pipeline.filter(p => p.status === 'Negosiasi').length;
     const lostCount  = pipeline.filter(p => p.status === 'Lost').length;
@@ -112,7 +113,7 @@ const Reports = {
       <div class="stats-grid" style="margin-bottom:24px;">
         <div class="stat-card">
           <div class="stat-icon info"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg></div>
-          <div class="stat-value">${pipeline.length}</div>
+          <div class="stat-value">${monthlyPipeline.length}</div>
           <div class="stat-label">Total Pipeline</div>
           <div class="stat-change up"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="18 15 12 9 6 15"/></svg>${DB.formatRupiah(totalValue)} estimasi</div>
         </div>
@@ -517,7 +518,8 @@ const Reports = {
   onFilterMonth(value) {
     if (!value) return;
     this._pipelineMonth = value;
-    this.refreshTable(true); // true = re-render full pipeline tab
+    const content = document.getElementById('page-content');
+    if (content) content.innerHTML = this.renderPage();
   },
 
   switchTab(tab) {
