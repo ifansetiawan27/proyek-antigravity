@@ -1701,6 +1701,25 @@ body.mobile-preview .topbar-right > div {
 }
 .tx-card-actions .btn { flex: 1; justify-content: center; }
 
+.invoice-pdf-import {
+  margin-bottom: 18px;
+  padding: 14px;
+  border: 1px dashed rgba(99,102,241,0.35);
+  border-radius: var(--radius-md);
+  background: rgba(99,102,241,0.05);
+}
+.invoice-pdf-status {
+  margin-top: 8px;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--text-muted);
+}
+.invoice-pdf-status.loading { color: var(--primary); }
+.invoice-pdf-status.success { color: var(--success); }
+.invoice-pdf-status.warning { color: var(--warning); }
+.invoice-pdf-status.error { color: var(--danger); }
+.invoice-pdf-import .btn:disabled { opacity: 0.6; cursor: wait; }
+
 /* Stock import button group (KBT / SBI / KDS) */
 .stock-import-btn {
   display: inline-flex;

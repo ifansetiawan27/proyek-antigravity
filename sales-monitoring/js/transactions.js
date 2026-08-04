@@ -30,6 +30,15 @@ const Transactions = {
           </div>
           
           <form id="tx-form" onsubmit="return false;">
+            <div class="invoice-pdf-import">
+              <input type="file" id="invoice-pdf-input" accept="application/pdf,.pdf" hidden onchange="Transactions.readInvoicePdf(this.files[0])" />
+              <button type="button" class="btn btn-secondary btn-full" id="btn-read-invoice" onclick="document.getElementById('invoice-pdf-input').click()">
+                <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><path d="M12 18v-6"/><path d="m9 15 3-3 3 3"/></svg>
+                Baca Faktur PDF
+              </button>
+              <div id="invoice-pdf-status" class="invoice-pdf-status">PDF dibaca lokal. Periksa hasilnya sebelum menyimpan.</div>
+            </div>
+
             <div class="form-group" style="margin-bottom:16px;">
               <label class="form-label" style="font-size:11px; font-weight:600; color:var(--text-secondary);">TANGGAL</label>
               <input type="date" class="form-control" id="f-date" value="${DB.today()}" required max="${DB.today()}" />
@@ -391,6 +400,160 @@ const Transactions = {
     }
   },
 
+  async readInvoicePdf(file) {
+    const input = document.getElementById('invoice-pdf-input');
+    if (!file) return;
+    if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) {
+      this.setInvoicePdfStatus('Pilih file dengan format PDF.', 'error');
+      if (input) input.value = '';
+      return;
+    }
+    if (file.size > 20 * 1024 * 1024) {
+      this.setInvoicePdfStatus('Ukuran PDF maksimal 20 MB.', 'error');
+      if (input) input.value = '';
+      return;
+    }
+    if (!window.pdfjsLib) {
+      this.setInvoicePdfStatus('Pembaca PDF gagal dimuat. Muat ulang halaman lalu coba lagi.', 'error');
+      return;
+    }
+
+    const button = document.getElementById('btn-read-invoice');
+    if (button) button.disabled = true;
+    this.setInvoicePdfStatus(`Membaca ${file.name}...`, 'loading');
+
+    try {
+      window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+      const pdf = await window.pdfjsLib.getDocument({ data: await file.arrayBuffer() }).promise;
+      const lines = [];
+
+      for (let pageNumber = 1; pageNumber <= pdf.numPages; pageNumber++) {
+        const page = await pdf.getPage(pageNumber);
+        const content = await page.getTextContent();
+        const pageLines = new Map();
+
+        content.items.forEach(item => {
+          const text = (item.str || '').trim();
+          if (!text) return;
+          const y = Math.round(item.transform[5] / 3) * 3;
+          const parts = pageLines.get(y) || [];
+          parts.push({ x: item.transform[4], text });
+          pageLines.set(y, parts);
+        });
+
+        [...pageLines.entries()]
+          .sort((a, b) => b[0] - a[0])
+          .forEach(([, parts]) => {
+            lines.push(parts.sort((a, b) => a.x - b.x).map(part => part.text).join(' ').replace(/\s+/g, ' ').trim());
+          });
+      }
+
+      if (!lines.join(' ').trim()) {
+        throw new Error('PDF tidak memiliki lapisan teks. Faktur hasil scan perlu diisi manual.');
+      }
+
+      const result = this.extractInvoiceData(lines);
+      const doctor = document.getElementById('f-doctor');
+      const items = document.getElementById('f-items-text');
+      const total = document.getElementById('f-total-amount');
+      const filled = [];
+
+      if (result.clinic && doctor) {
+        doctor.value = result.clinic;
+        filled.push('klinik/RS');
+      }
+      if (result.items.length && items) {
+        items.value = result.items.join(', ');
+        filled.push('nama barang');
+      }
+      if (result.total && total) {
+        total.value = this.formatAmountValue(result.total);
+        this.onTotalAmountChange(result.total);
+        filled.push('total penjualan');
+      }
+
+      if (!filled.length) {
+        this.setInvoicePdfStatus('Teks PDF terbaca, tetapi data faktur tidak dikenali. Isi form secara manual.', 'warning');
+      } else {
+        const missing = [!result.clinic && 'klinik/RS', !result.items.length && 'nama barang', !result.total && 'total penjualan'].filter(Boolean);
+        this.setInvoicePdfStatus(`Terisi otomatis: ${filled.join(', ')}.${missing.length ? ` Belum ditemukan: ${missing.join(', ')}.` : ''} Periksa sebelum menyimpan.`, missing.length ? 'warning' : 'success');
+      }
+    } catch (error) {
+      this.setInvoicePdfStatus(error.message || 'Faktur PDF gagal dibaca.', 'error');
+    } finally {
+      if (button) button.disabled = false;
+      if (input) input.value = '';
+    }
+  },
+
+  extractInvoiceData(lines) {
+    const cleanLines = lines.map(line => line.replace(/\s+/g, ' ').trim()).filter(Boolean);
+    const fullText = cleanLines.join('\n');
+    const normalizedText = this.normalizeInvoiceText(fullText);
+    const labelValue = labels => {
+      for (let i = 0; i < cleanLines.length; i++) {
+        const match = cleanLines[i].match(new RegExp(`^(?:${labels})\\s*(?::|-)?\\s*(.*)$`, 'i'));
+        if (match) return (match[1] || cleanLines[i + 1] || '').trim();
+      }
+      return '';
+    };
+
+    let clinic = labelValue('nama\\s*(?:klinik(?:\\s*\\/\\s*rs)?|rs|rumah\\s*sakit|dokter|instansi(?:\\s*rs)?)|klinik(?:\\s*\\/\\s*rs)?|rumah\\s*sakit|customer|pelanggan|kepada|bill\\s*to|ship\\s*to');
+    clinic = clinic.replace(/^(?:yth\.?|kepada)\s*/i, '').replace(/\s{2,}.*$/, '').trim();
+
+    if (!clinic) {
+      const knownDoctor = DB.getDoctors()
+        .filter(doc => doc.name || doc.clinic)
+        .sort((a, b) => Math.max((b.name || '').length, (b.clinic || '').length) - Math.max((a.name || '').length, (a.clinic || '').length))
+        .find(doc => [doc.name, doc.clinic].filter(Boolean).some(value => normalizedText.includes(this.normalizeInvoiceText(value))));
+      if (knownDoctor) clinic = knownDoctor.name || knownDoctor.clinic;
+    }
+
+    const catalogue = [...DB.getProducts().map(product => product.name), ...DB.getStock().map(stock => stock.nama)]
+      .filter(Boolean)
+      .filter((name, index, all) => all.findIndex(item => item.toLowerCase() === name.toLowerCase()) === index)
+      .sort((a, b) => b.length - a.length);
+    const items = catalogue.filter(name => normalizedText.includes(this.normalizeInvoiceText(name)));
+
+    if (!items.length) {
+      const itemLabel = /^(?:nama\s*)?(?:barang|produk|item|alkes|obat|paket|deskripsi|description)\s*(?::|-)?\s*(.*)$/i;
+      cleanLines.forEach((line, index) => {
+        const match = line.match(itemLabel);
+        const value = match && (match[1] || cleanLines[index + 1] || '').trim();
+        if (value && !/^(?:qty|jumlah|harga|price|total)$/i.test(value)) items.push(value);
+      });
+    }
+
+    const totalLabels = ['grand\\s*total', 'total\\s*(?:tagihan|pembayaran|penjualan|belanja|invoice)', 'jumlah\\s*tagihan', 'amount\\s*due', 'total'];
+    let total = 0;
+    for (const label of totalLabels) {
+      const pattern = new RegExp(`${label}[^\\d\\r\\n]{0,15}(?:rp\\.?[ \\t]*)?([\\d][\\d., \\t]{2,})`, 'ig');
+      const values = [...fullText.matchAll(pattern)].map(match => this.parseInvoiceAmount(match[1])).filter(value => value > 0);
+      if (values.length) {
+        total = Math.max(...values);
+        break;
+      }
+    }
+
+    return { clinic, items: [...new Set(items)].slice(0, 20), total };
+  },
+
+  normalizeInvoiceText(value) {
+    return (value || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]+/g, ' ').trim();
+  },
+
+  parseInvoiceAmount(value) {
+    const digits = (value || '').replace(/\D/g, '');
+    return Number(digits) || 0;
+  },
+
+  setInvoicePdfStatus(message, type = '') {
+    const status = document.getElementById('invoice-pdf-status');
+    if (!status) return;
+    status.textContent = message;
+    status.className = `invoice-pdf-status${type ? ` ${type}` : ''}`;
+  },
+
   editTransaction(id) {
     const tx = DB.getTransactionById(id);
     if (!tx) return;
@@ -434,6 +597,8 @@ const Transactions = {
 
     const preview = document.getElementById('f-stamp-preview');
     if (preview) preview.innerHTML = '';
+
+    this.setInvoicePdfStatus('PDF dibaca lokal. Periksa hasilnya sebelum menyimpan.');
 
     const btnSave = document.getElementById('btn-save-tx');
     const btnCancel = document.getElementById('btn-cancel-edit');
