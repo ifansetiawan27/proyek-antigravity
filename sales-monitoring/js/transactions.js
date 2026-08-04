@@ -527,7 +527,7 @@ const Transactions = {
 
     const items = this.sanitizeInvoiceItems(Array.isArray(payload.items) ? payload.items : []);
     const total = Number(payload.total) || 0;
-    const requester = String(payload.requester || '').replace(/\s+/g, ' ').trim();
+    const requester = this.sanitizeInvoiceRequester(payload.requester);
     if (!requester && !items.length && !total) throw new Error('AI tidak menemukan data faktur.');
     return { requester, items, total };
   },
@@ -600,34 +600,59 @@ const Transactions = {
 
   extractInvoiceRequester(lines, lineDetails = []) {
     const labels = /^(?:(?:nama\s*)?(?:pemesan|pembeli|customer|pelanggan|bill\s*to|ship\s*to)|kepada(?:\s+yth\.?)?)\s*(?::|-)?\s*(.*)$/i;
+    const invoiceLabel = /^(?:(?:no(?:mor)?\.?\s*)?(?:faktur|invoice)|(?:faktur|invoice)\s*(?:no(?:mor)?\.?|number|#))\b/i;
     const invalidRequester = /^(?:nama(?:\s*barang)?|barang|produk|deskripsi|description|kode|sku|qty|jumlah|harga|price|amount|total|biaya|penggantian|pengiriman|alamat|address|telepon|phone|email|tanggal|date|invoice|faktur|ppn|pajak|diskon|discount)\b/i;
     const cleanRequester = value => (value || '')
       .replace(/^yth\.?\s*/i, '')
       .replace(/\s{2,}.*$/, '')
       .replace(/^[|:;,-]+|[|:;,-]+$/g, '')
       .trim();
+    const isValidRequester = value => {
+      if (!value || invalidRequester.test(value) || !/[a-z]/i.test(value)) return false;
+      if (/^(?:\d{1,2}[\s./-]){1,2}\d{2,4}$/.test(value)) return false;
+      if (/^(?:\d{1,2}\s+)?(?:jan(?:uari)?|feb(?:ruari)?|mar(?:et)?|apr(?:il)?|mei|jun(?:i)?|jul(?:i)?|agu(?:stus)?|sep(?:tember)?|okt(?:ober)?|nov(?:ember)?|des(?:ember)?)(?:\s+\d{2,4})?$/i.test(value)) return false;
+      if (/^(?=[A-Z0-9./-]*\d)[A-Z0-9]+(?:[./-][A-Z0-9]+)+$/i.test(value)) return false;
+      if (/^(?:rp\.?\s*)?[\d.,\s]+$/.test(value)) return false;
+      return true;
+    };
+    const getCandidates = (index, offsets) => offsets
+      .map(offset => {
+        const value = cleanRequester(lines[index + offset]);
+        const detail = lineDetails[index + offset] || {};
+        return { value, offset, bold: Boolean(detail.bold), size: Number(detail.size) || 0 };
+      })
+      .filter(candidate => isValidRequester(candidate.value));
+    const selectCandidate = candidates => {
+      const boldCandidate = candidates
+        .filter(candidate => candidate.bold)
+        .sort((a, b) => a.offset - b.offset || b.size - a.size)[0];
+      return boldCandidate || candidates[0];
+    };
+
+    for (let index = 0; index < lines.length; index++) {
+      if (!invoiceLabel.test(lines[index])) continue;
+      const candidate = selectCandidate(getCandidates(index, [1, 2, 3, 4]));
+      if (candidate) return candidate.value;
+    }
 
     for (let index = 0; index < lines.length; index++) {
       const match = lines[index].match(labels);
       if (!match) continue;
       const inlineValue = cleanRequester(match[1]);
-      if (inlineValue && !invalidRequester.test(inlineValue)) return inlineValue;
-
-      const candidates = [1, 2]
-        .map(offset => {
-          const value = cleanRequester(lines[index + offset]);
-          const detail = lineDetails[index + offset] || {};
-          return { value, offset, bold: Boolean(detail.bold), size: Number(detail.size) || 0 };
-        })
-        .filter(candidate => candidate.value && !invalidRequester.test(candidate.value) && /[a-z]/i.test(candidate.value) && !/^\d[\d\s./-]*$/.test(candidate.value));
-
-      const boldCandidate = candidates
-        .filter(candidate => candidate.bold)
-        .sort((a, b) => a.offset - b.offset || b.size - a.size)[0];
-      if (boldCandidate) return boldCandidate.value;
-      if (candidates[0]) return candidates[0].value;
+      if (isValidRequester(inlineValue)) return inlineValue;
+      const candidate = selectCandidate(getCandidates(index, [1, 2]));
+      if (candidate) return candidate.value;
     }
     return '';
+  },
+
+  sanitizeInvoiceRequester(value) {
+    const requester = String(value || '').replace(/\s+/g, ' ').replace(/^yth\.?\s*/i, '').trim();
+    if (!requester) return '';
+    if (/^(?:\d{1,2}[\s./-]){1,2}\d{2,4}$/.test(requester)) return '';
+    if (/^(?:\d{1,2}\s+)?(?:jan(?:uari)?|feb(?:ruari)?|mar(?:et)?|apr(?:il)?|mei|jun(?:i)?|jul(?:i)?|agu(?:stus)?|sep(?:tember)?|okt(?:ober)?|nov(?:ember)?|des(?:ember)?)(?:\s+\d{2,4})?$/i.test(requester)) return '';
+    if (/^(?=[A-Z0-9./-]*\d)[A-Z0-9]+(?:[./-][A-Z0-9]+)+$/i.test(requester)) return '';
+    return requester;
   },
 
   sanitizeInvoiceItems(items) {
