@@ -462,10 +462,15 @@ const Transactions = {
           result = this.extractInvoiceData(lines);
         }
       }
+      const requester = document.getElementById('f-doctor');
       const items = document.getElementById('f-items-text');
       const total = document.getElementById('f-total-amount');
       const filled = [];
 
+      if (result.requester && requester) {
+        requester.value = result.requester;
+        filled.push('nama pemesan');
+      }
       if (result.items.length && items) {
         items.value = result.items.join(', ');
         filled.push('nama barang');
@@ -479,7 +484,7 @@ const Transactions = {
       if (!filled.length) {
         this.setInvoicePdfStatus('Teks PDF terbaca, tetapi data faktur tidak dikenali. Isi form secara manual.', 'warning');
       } else {
-        const missing = [!result.items.length && 'nama barang', !result.total && 'total harga'].filter(Boolean);
+        const missing = [!result.requester && 'nama pemesan', !result.items.length && 'nama barang', !result.total && 'total harga'].filter(Boolean);
         this.setInvoicePdfStatus(`Terisi otomatis: ${filled.join(', ')}.${missing.length ? ` Belum ditemukan: ${missing.join(', ')}.` : ''} Periksa sebelum menyimpan.`, missing.length ? 'warning' : 'success');
       }
     } catch (error) {
@@ -508,8 +513,9 @@ const Transactions = {
 
     const items = this.sanitizeInvoiceItems(Array.isArray(payload.items) ? payload.items : []);
     const total = Number(payload.total) || 0;
-    if (!items.length && !total) throw new Error('AI tidak menemukan data faktur.');
-    return { items, total };
+    const requester = String(payload.requester || '').replace(/\s+/g, ' ').trim();
+    if (!requester && !items.length && !total) throw new Error('AI tidak menemukan data faktur.');
+    return { requester, items, total };
   },
 
   async extractInvoiceTextWithOcr(pdf) {
@@ -546,6 +552,7 @@ const Transactions = {
     const cleanLines = lines.map(line => line.replace(/\s+/g, ' ').trim()).filter(Boolean);
     const fullText = cleanLines.join('\n');
     const normalizedText = this.normalizeInvoiceText(fullText);
+    const requester = this.extractInvoiceRequester(cleanLines);
     const catalogue = [...DB.getProducts().map(product => product.name), ...DB.getStock().map(stock => stock.nama)]
       .filter(Boolean)
       .filter((name, index, all) => all.findIndex(item => item.toLowerCase() === name.toLowerCase()) === index)
@@ -574,10 +581,29 @@ const Transactions = {
       }
     }
 
-    return { items: this.sanitizeInvoiceItems(items), total };
+    return { requester, items: this.sanitizeInvoiceItems(items), total };
+  },
+
+  extractInvoiceRequester(lines) {
+    const labels = /^(?:nama\s*)?(?:pemesan|pembeli|customer|pelanggan|bill\s*to|ship\s*to)\s*(?::|-)?\s*(.*)$/i;
+    for (let index = 0; index < lines.length; index++) {
+      const match = lines[index].match(labels);
+      if (!match) continue;
+      const value = (match[1] || lines[index + 1] || '').replace(/\s{2,}.*$/, '').trim();
+      if (value && !/^(?:nama|alamat|address|telepon|phone|email|tanggal|date)$/i.test(value)) return value;
+    }
+    return '';
   },
 
   sanitizeInvoiceItems(items) {
+    const excludedItemPattern = /^(?:nama(?:\s*barang)?|biaya|jumlah|penggantian|biaya\s*(?:pengiriman|kirim)|ongkos\s*kirim|ongkir|shipping(?:\s*(?:fee|cost))?|delivery(?:\s*(?:fee|cost))?)\s*(?::|-)?\s*$/i;
+    const excludedCostPattern = /^(?:penggantian\s*)?biaya\s*(?:pengiriman|kirim)|^(?:ongkos\s*kirim|ongkir|shipping(?:\s*(?:fee|cost))?|delivery(?:\s*(?:fee|cost))?)/i;
+    const isExcludedItem = value => {
+      if (excludedItemPattern.test(value) || excludedCostPattern.test(value)) return true;
+      const words = this.normalizeInvoiceText(value).split(' ').filter(Boolean);
+      const metadataWords = new Set(['nama', 'barang', 'biaya', 'jumlah', 'penggantian', 'pengiriman', 'kirim', 'ongkos', 'ongkir', 'shipping', 'delivery', 'fee', 'cost']);
+      return words.length > 0 && words.every(word => metadataWords.has(word));
+    };
     const catalogue = [
       ...DB.getProducts().map(product => ({ name: product.name, code: product.sku })),
       ...DB.getStock().map(stock => ({ name: stock.nama, code: stock.kode })),
@@ -587,7 +613,7 @@ const Transactions = {
 
     const cleaned = items.map(rawItem => {
       let value = String(rawItem || '').replace(/\s+/g, ' ').trim();
-      if (!value) return '';
+      if (!value || isExcludedItem(value)) return '';
       const normalizedValue = this.normalizeInvoiceText(value);
       const catalogueMatch = catalogue.find(item => normalizedValue.includes(this.normalizeInvoiceText(item.name)));
       if (catalogueMatch) return catalogueMatch.name;
@@ -604,7 +630,7 @@ const Transactions = {
         .replace(/\s*(?:[|:;,-]\s*)?(?:kode|code|sku)\s*[:#-]?\s*[A-Z0-9][A-Z0-9./-]*$/i, '')
         .replace(/^[|:;,-]+|[|:;,-]+$/g, '')
         .trim();
-    }).filter(value => value.length >= 2 && /[a-z]/i.test(value));
+    }).filter(value => value.length >= 2 && /[a-z]/i.test(value) && !isExcludedItem(value));
 
     return [...new Set(cleaned)].slice(0, 20);
   },
@@ -612,7 +638,7 @@ const Transactions = {
   extractInvoiceTableItems(lines) {
     const headerPattern = /(?:nama\s*)?(?:barang|produk|item|alkes|obat|paket|deskripsi|description)/i;
     const stopPattern = /^(?:sub\s*total|subtotal|grand\s*total|total\s*(?:tagihan|pembayaran|belanja|invoice)?|ppn|pajak|diskon|discount|amount\s*due|terbilang)/i;
-    const noisePattern = /(?:invoice|faktur|tanggal|date|customer|pelanggan|kepada|bill\s*to|ship\s*to|alamat|address|telepon|phone|email|rekening|bank|jatuh\s*tempo|due\s*date)/i;
+    const noisePattern = /(?:invoice|faktur|tanggal|date|customer|pelanggan|pemesan|pembeli|kepada|bill\s*to|ship\s*to|alamat|address|telepon|phone|email|rekening|bank|jatuh\s*tempo|due\s*date|penggantian|biaya\s*(?:pengiriman|kirim)|ongkos\s*kirim|ongkir|shipping|delivery)/i;
     const unitPattern = /\b\d+(?:[.,]\d+)?\s*(?:pcs?|unit|box|pak|pack|set|buah|bh|botol|ampul|vial|tablet|strip|roll|lusin)\b/i;
     const items = [];
     let inTable = false;

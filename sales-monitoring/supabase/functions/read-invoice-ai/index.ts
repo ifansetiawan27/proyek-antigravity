@@ -39,9 +39,11 @@ Deno.serve(async (request) => {
 
   const prompt = `Baca faktur penjualan PDF ini secara akurat, termasuk jika berupa hasil scan.
 Ambil HANYA:
-1. Semua nama barang/produk/alkes/obat yang benar-benar tercantum sebagai item penjualan. Kembalikan nama barangnya saja tanpa kode barang, SKU, item code, nomor urut, qty, satuan, merek pada kolom terpisah, atau nilai lain dari kolom tabel.
-2. Total akhir yang harus dibayar (prioritaskan Grand Total/Total Tagihan/Amount Due, setelah diskon dan pajak).
-Jangan ambil kode barang/SKU/item code, nama klinik, rumah sakit, dokter, sales, nomor faktur, tanggal, alamat, subtotal, pajak, diskon, harga satuan, qty, satuan, atau jumlah per baris.
+1. Nama pemesan/pembeli/customer yang tercantum pada faktur.
+2. Semua nama barang/produk/alkes/obat yang benar-benar tercantum sebagai item penjualan. Kembalikan nama barangnya saja tanpa kode barang, SKU, item code, nomor urut, qty, satuan, merek pada kolom terpisah, atau nilai lain dari kolom tabel.
+3. Total akhir yang harus dibayar (prioritaskan Grand Total/Total Tagihan/Amount Due, setelah diskon dan pajak).
+Teks "Nama", "Biaya", "Jumlah", "Penggantian", "Biaya Pengiriman", ongkir, shipping fee, dan delivery fee BUKAN nama barang dan tidak boleh dimasukkan ke items.
+Jangan ambil kode barang/SKU/item code, nama klinik, rumah sakit, dokter, sales, nomor faktur, tanggal, alamat, subtotal, pajak, diskon, harga satuan, qty, satuan, biaya pengiriman, ongkir, atau jumlah per baris sebagai items.
 Jangan menebak. Jika tidak ditemukan gunakan array kosong atau 0.`
 
   try {
@@ -63,10 +65,11 @@ Jangan menebak. Jika tidak ditemukan gunakan array kosong atau 0.`
             responseSchema: {
               type: 'OBJECT',
               properties: {
+                requester: { type: 'STRING' },
                 items: { type: 'ARRAY', items: { type: 'STRING' } },
                 total: { type: 'NUMBER' },
               },
-              required: ['items', 'total'],
+              required: ['requester', 'items', 'total'],
             },
           },
         }),
@@ -81,11 +84,12 @@ Jangan menebak. Jika tidak ditemukan gunakan array kosong atau 0.`
 
     const text = geminiPayload?.candidates?.[0]?.content?.parts?.[0]?.text
     const result = JSON.parse(text || '{}')
+    const requester = String(result.requester || '').trim()
     const items = Array.isArray(result.items)
       ? result.items.map((item: unknown) => String(item).trim()).filter(Boolean).slice(0, 20)
       : []
     const total = Number(result.total) || 0
-    return json({ items: [...new Set(items)], total }, 200, origin)
+    return json({ requester, items: [...new Set(items)], total }, 200, origin)
   } catch (error) {
     console.error('Invoice AI error', error)
     return json({ error: 'AI gagal membaca faktur.' }, 500, origin)
