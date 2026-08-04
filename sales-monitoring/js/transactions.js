@@ -50,7 +50,7 @@ const Transactions = {
             </div>
 
             <div class="form-group" style="margin-bottom:16px;">
-              <label class="form-label" style="font-size:11px; font-weight:600; color:var(--text-secondary);">ALKES / OBAT / PAKET</label>
+              <label class="form-label" style="font-size:11px; font-weight:600; color:var(--text-secondary);">NAMA BARANG</label>
               <textarea class="form-control" id="f-items-text" rows="3" placeholder="Paracetamol Box, Dental Unit Pro-8" required></textarea>
             </div>
 
