@@ -228,7 +228,7 @@ const Reports = {
         <div class="search-input-wrap" style="flex:1;min-width:180px;">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
           <input type="text" class="search-input" id="pipeline-search"
-            placeholder="Cari dokter, klinik, atau nama barang..."
+            placeholder="Cari dokter, klinik, nama barang, atau sales..."
             value="${this._searchQuery}"
             oninput="Reports.onSearch(this.value)" />
         </div>
@@ -277,11 +277,13 @@ const Reports = {
     // Filter pencarian
     if (this._searchQuery) {
       const q = this._searchQuery.toLowerCase();
-      items = items.filter(p =>
-        p.doctorName.toLowerCase().includes(q) ||
-        p.clinicName.toLowerCase().includes(q) ||
-        p.itemName.toLowerCase().includes(q)
-      );
+      items = items.filter(p => {
+        const salesName = DB.getUserById(p.salesId)?.name || '';
+        return p.doctorName.toLowerCase().includes(q) ||
+          p.clinicName.toLowerCase().includes(q) ||
+          p.itemName.toLowerCase().includes(q) ||
+          salesName.toLowerCase().includes(q);
+      });
     }
 
     items = items.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
